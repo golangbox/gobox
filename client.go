@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 // http://matt.aimonetti.net/posts/2013/07/01/golang-multipart-file-upload-example/
@@ -57,7 +58,7 @@ func file_sha1(name string) (sha1_string string, err error) {
 	file, err := ioutil.ReadFile(name)
 
 	if err != nil {
-		return "", fmt.Errorf("Error reading file: %s", err)
+		return "", fmt.Errorf("Error reading file for sha1: %s", err)
 	}
 
 	h := sha1.New()
@@ -65,7 +66,7 @@ func file_sha1(name string) (sha1_string string, err error) {
 	_, err = h.Write(file)
 
 	if err != nil {
-		return "", fmt.Errorf("Error writing file to hash: %s", err)
+		return "", fmt.Errorf("Error writing file to hash for sha1: %s", err)
 	}
 
 	byte_string := h.Sum(nil)
@@ -119,38 +120,63 @@ func upload_file(name string) (*http.Response, error) {
 // 	return e.err
 // }
 
-func create_file_manifest() {
-	files, err := ioutil.ReadDir("./") //read all the files
+func find_files(directory string, files_slice []Fileinfo) (output_files_slice []Fileinfo, err error) {
+	files, err := ioutil.ReadDir(directory)
+
 	if err != nil {
-		fmt.Println(fmt.Errorf("Unable to read directory: %s", err))
+		return nil, fmt.Errorf("Unable to read directory: %s", err)
 	}
-
-	files_slice := []Fileinfo{}
 	for _, f := range files {
-		// fmt.Println(f.Name(), f.Size(), f.Sys())
-		fmt.Println(f.Name(), f.Size(), f.Mode(), f.IsDir())
+		name := f.Name()
+		path := directory + "/" + name
+		fmt.Println("Scanning file: " + path)
+		if !f.IsDir() { // if file is not directory
 
-		s, err := file_sha1(f.Name())
-		if err != nil {
-			fmt.Println(err)
+			// fmt.Println(f.Name(), f.Size(), f.Mode(), f.IsDir(), f.Sys())
+
+			sha1, err := file_sha1(path)
+			if err != nil {
+				fmt.Println(err)
+			}
+			// fmt.Println(s)
+			file_data := Fileinfo{name, sha1, f.Size(), path, f.ModTime()}
+			files_slice = append(files_slice, file_data)
+		} else {
+			files_slice, err = find_files(path, files_slice)
 		}
-		fmt.Println(s)
-		file_data := Fileinfo{f.Name(), s, f.Size()}
-		// tmp_slice := []Fileinfo{file_data}
-		files_slice = append(files_slice, file_data)
 	}
-	fmt.Println(files_slice)
-	b, _ := json.Marshal(files_slice)
-	fmt.Println(string(b))
+	return files_slice, err
+}
+
+func create_file_manifest() (json_bytes []byte, err error) {
+	//get files and folders in current directory
+	directory := "."
+	files_slice := []Fileinfo{}
+
+	files_slice, err = find_files(directory, files_slice)
+
+	// fmt.Println(files_slice)
+	b, err := json.Marshal(files_slice)
+	if err != nil {
+		return nil, fmt.Errorf("Error with json Marshal of file slice: %s", err)
+	}
+
+	return b, err
 }
 
 type Fileinfo struct {
-	Name string
-	Hash string
-	Size int64
+	Name     string
+	Hash     string
+	Size     int64
+	Path     string
+	Modified time.Time
 }
 
 func watchFiles(watcher *fsnotify.Watcher) {
+	// watches files in the current directory
+	// this should potentially be used to listed for general changes on the
+	// filesystem, but is too noisy to be used to calculate the index and
+	// trigger uploads
 	for {
 		select {
 		case event := <-watcher.Events:
@@ -173,9 +199,16 @@ func watchFiles(watcher *fsnotify.Watcher) {
 }
 
 func main() {
-
+	fmt.Println("Running GoBox...")
 	// upload_file(name)
-	create_file_manifest()
+	manifest, err := create_file_manifest()
+	if err != nil {
+		fmt.Println(err)
+	}
+	if manifest != nil {
+		fmt.Println(string(manifest))
+		fmt.Println("File manifest created")
+	}
 
 	watcher, err := fsnotify.NewWatcher()
 
@@ -184,14 +217,15 @@ func main() {
 	}
 	defer watcher.Close()
 
-	done := make(chan bool)
-	go watchFiles(watcher)
-	// directories = getDirsOnPWD
-	// go recursiveListeners(directories, channel)
-	// for event range channel { perform operations on event because it happened in some goroutine }
-	err = watcher.Add(".") // listen in the current directory
-	if err != nil {
-		log.Fatal(err)
-	}
-	<-done
+	// done := make(chan bool)
+	// fmt.Println("Listening for file changes...")
+	// go watchFiles(watcher)
+	// // directories = getDirsOnPWD
+	// // go recursiveListeners(directories, channel)
+	// // for event range channel { perform operations on event because it happened in some goroutine }
+	// err = watcher.Add(".") // listen in the current directory
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// <-done
 }
