@@ -10,7 +10,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
 	"github.com/go-fsnotify/fsnotify"
 	"io"
@@ -22,6 +22,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+)
+
+const (
+	goBoxDirectory = "."
 )
 
 // http://matt.aimonetti.net/posts/2013/07/01/golang-multipart-file-upload-example/
@@ -120,7 +124,11 @@ func upload_file(name string) (*http.Response, error) {
 // 	return e.err
 // }
 
-func find_files(directory string, files_slice []Fileinfo) (output_files_slice []Fileinfo, err error) {
+func map_key_value(path string, sha1 string) (key string) {
+	return path + "-" + sha1
+}
+
+func find_files(directory string, files_map map[string]Fileinfo) (output_files_map map[string]Fileinfo, err error) {
 	files, err := ioutil.ReadDir(directory)
 
 	if err != nil {
@@ -139,29 +147,54 @@ func find_files(directory string, files_slice []Fileinfo) (output_files_slice []
 				fmt.Println(err)
 			}
 			// fmt.Println(s)
-			file_data := Fileinfo{name, sha1, f.Size(), path, f.ModTime()}
-			files_slice = append(files_slice, file_data)
+			key := map_key_value(path, sha1)
+			files_map[key] = Fileinfo{name, sha1, f.Size(), path, f.ModTime()}
 		} else {
-			files_slice, err = find_files(path, files_slice)
+			files_map, err = find_files(path, files_map)
 		}
 	}
-	return files_slice, err
+	return files_map, err
 }
 
-func create_file_manifest() (json_bytes []byte, err error) {
+func create_file_manifest(previous_manifest map[string]Fileinfo) (files_map map[string]Fileinfo, err error) {
 	//get files and folders in current directory
-	directory := "."
-	files_slice := []Fileinfo{}
+	directory := goBoxDirectory
+	var empty_files_map map[string]Fileinfo
+	empty_files_map = make(map[string]Fileinfo)
 
-	files_slice, err = find_files(directory, files_slice)
+	files_map, err = find_files(directory, empty_files_map)
 
-	// fmt.Println(files_slice)
-	b, err := json.Marshal(files_slice)
-	if err != nil {
-		return nil, fmt.Errorf("Error with json Marshal of file slice: %s", err)
+	// Implement a map of path + sha1
+	// When a new manifest is created compare it to the old manifest.
+	// When there are new entires that don't exist in the old manifest,
+	// assume we have to create a new file
+	// Only check files that are modified after the date of the last
+	// manifest, for a small speedup.
+
+	// When there are entires in the old manifest that don't exist in the
+	// current manifest, assume we have to delete a file
+
+	// This ignore chmod changes, and other metadata changes.
+
+	for key, _ := range files_map {
+		// http://stackoverflow.com/questions/2050391/how-to-test-key-existence-in-a-map
+		if _, ok := previous_manifest[key]; !ok {
+			fmt.Println("Need to Upload:", key)
+		}
+	}
+	for key, _ := range previous_manifest {
+		if _, ok := files_map[key]; !ok {
+			fmt.Println("Need to delete:", key)
+		}
 	}
 
-	return b, err
+	// fmt.Println(files_slice)
+	// b, err := json.Marshal(files_slice)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("Error with json Marshal of file slice: %s", err)
+	// }
+
+	return files_map, err
 }
 
 type Fileinfo struct {
@@ -198,24 +231,40 @@ func watchFiles(watcher *fsnotify.Watcher) {
 	}
 }
 
+func new_upload_file() {
+	// send a sha1
+	// if they don't have it, upload the file
+}
+
+func upload_manifest() {
+
+}
+
 func main() {
 	fmt.Println("Running GoBox...")
 	// upload_file(name)
-	manifest, err := create_file_manifest()
+	var empty_manifest map[string]Fileinfo
+	empty_manifest = make(map[string]Fileinfo)
+
+	manifest_map, err := create_file_manifest(empty_manifest)
 	if err != nil {
 		fmt.Println(err)
 	}
-	if manifest != nil {
-		fmt.Println(string(manifest))
+	if manifest_map != nil {
+		// for key, value := range manifest_map {
+		// 	fmt.Println("Key:", key, "Value:", value)
+		// }
 		fmt.Println("File manifest created")
 	}
 
-	watcher, err := fsnotify.NewWatcher()
+	check_for_files()
 
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer watcher.Close()
+	// watcher, err := fsnotify.NewWatcher()
+
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer watcher.Close()
 
 	// done := make(chan bool)
 	// fmt.Println("Listening for file changes...")
@@ -228,4 +277,5 @@ func main() {
 	// 	log.Fatal(err)
 	// }
 	// <-done
+
 }
