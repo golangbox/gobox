@@ -10,7 +10,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
-	// "encoding/json"
+	"encoding/json"
 	"fmt"
 	"github.com/go-fsnotify/fsnotify"
 	"io"
@@ -25,8 +25,120 @@ import (
 )
 
 const (
-	goBoxDirectory = "."
+	kGoBoxDirectory     = "."
+	kGoBoxDataDirectory = ".GoBox"
 )
+
+func main() {
+	fmt.Println("Running GoBox...")
+	// upload_file(name)
+	createGoBoxLocalDirectory()
+
+	go monitorFiles()
+
+	// watcher, err := fsnotify.NewWatcher()
+
+	// if err != nil {
+	//  log.Fatal(err)
+	// }
+	// defer watcher.Close()
+
+	// done := make(chan bool)
+	// fmt.Println("Listening for file changes...")
+	// go watchFiles(watcher)
+	// // directories = getDirsOnPWD
+	// // go recursiveListeners(directories, channel)
+	// // for event range channel { perform operations on event because it happened in some goroutine }
+	// err = watcher.Add(".") // listen in the current directory
+	// if err != nil {
+	//  log.Fatal(err)
+	// }
+	// <-done
+
+	select {}
+}
+
+func createGoBoxLocalDirectory() {
+
+	_, err := os.Stat(kGoBoxDataDirectory)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("Making directory")
+		err := os.Mkdir(kGoBoxDataDirectory, 0777)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func monitorFiles() {
+
+	// type manifest struct {
+	// 		Map map
+	// 		updateManifest() func
+	// }
+
+	// monitoring class
+	// manifest object class
+	//
+
+	var newFileInfos map[string]FileInfo = make(map[string]FileInfo)
+	var fileInfos map[string]FileInfo = make(map[string]FileInfo)
+
+	data, err := ioutil.ReadFile(kGoBoxDataDirectory + "/data")
+	if err != nil {
+		fmt.Println(err)
+	}
+	if data != nil {
+		err = json.Unmarshal(data, &fileInfos)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+
+	for _ = range time.Tick(10 * time.Second) {
+
+		newFileInfos, err = findFilesInDirectory(kGoBoxDirectory)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		err = writeFileInfosToLocalFile(newFileInfos)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println("Saved data locally")
+		}
+
+		compareFileInfos(fileInfos, newFileInfos)
+		fileInfos = newFileInfos
+	}
+}
+
+func writeFileInfosToLocalFile(fileInfos map[string]FileInfo) error {
+	jsonBytes, err := json.Marshal(fileInfos)
+	if err != nil {
+		return err
+	}
+	// d1 := []byte("hello\ngo\n")
+	err = ioutil.WriteFile(kGoBoxDataDirectory+"/data", jsonBytes, 0644)
+	return err
+}
+
+func compareFileInfos(fileInfos map[string]FileInfo, newFileInfos map[string]FileInfo) {
+
+	for key, _ := range newFileInfos {
+		// http://stackoverflow.com/questions/2050391/how-to-test-key-existence-in-a-map
+		if _, exists := fileInfos[key]; !exists {
+			fmt.Println("Need to Upload:", key)
+		}
+	}
+	for key, _ := range fileInfos {
+		if _, exists := newFileInfos[key]; !exists {
+			fmt.Println("Need to delete:", key)
+		}
+	}
+}
 
 // http://matt.aimonetti.net/posts/2013/07/01/golang-multipart-file-upload-example/
 func newfileUploadRequest(uri string, params map[string]string, paramName, path string) (*http.Request, error) {
@@ -58,33 +170,27 @@ func newfileUploadRequest(uri string, params map[string]string, paramName, path 
 	return req, err
 }
 
-func file_sha1(name string) (sha1_string string, err error) {
-	file, err := ioutil.ReadFile(name)
-
+func getSha1FromFilename(filename string) (sha1_string string, err error) {
+	file, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return "", fmt.Errorf("Error reading file for sha1: %s", err)
 	}
-
 	h := sha1.New()
-
 	_, err = h.Write(file)
-
 	if err != nil {
 		return "", fmt.Errorf("Error writing file to hash for sha1: %s", err)
 	}
-
 	byte_string := h.Sum(nil)
 
-	hex.EncodeToString(byte_string)
 	sha1_string = hex.EncodeToString(byte_string)
 
 	return sha1_string, nil
 }
 
-func upload_file(name string) (*http.Response, error) {
+func uploadFile(name string) (*http.Response, error) {
 	// filename := "main.go"
 	file, _ := os.Stat(name)
-	s, err := file_sha1(name)
+	s, err := getSha1FromFilename(name)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -124,80 +230,44 @@ func upload_file(name string) (*http.Response, error) {
 // 	return e.err
 // }
 
-func map_key_value(path string, sha1 string) (key string) {
+func mapKeyValue(path string, sha1 string) (key string) {
 	return path + "-" + sha1
 }
 
-func find_files(directory string, files_map map[string]Fileinfo) (output_files_map map[string]Fileinfo, err error) {
+func findFilesInDirectoryHelper(directory string, fileInfos map[string]FileInfo) (outputFileInfos map[string]FileInfo, err error) {
 	files, err := ioutil.ReadDir(directory)
-
 	if err != nil {
 		return nil, fmt.Errorf("Unable to read directory: %s", err)
 	}
+
 	for _, f := range files {
 		name := f.Name()
 		path := directory + "/" + name
-		fmt.Println("Scanning file: " + path)
-		if !f.IsDir() { // if file is not directory
 
-			// fmt.Println(f.Name(), f.Size(), f.Mode(), f.IsDir(), f.Sys())
-
-			sha1, err := file_sha1(path)
+		// fmt.Println("Scanning file: " + path)
+		if f.IsDir() {
+			if f.Name() != kGoBoxDataDirectory {
+				fileInfos, err = findFilesInDirectoryHelper(path, fileInfos)
+			}
+		} else {
+			sha1, err := getSha1FromFilename(path)
 			if err != nil {
 				fmt.Println(err)
 			}
-			// fmt.Println(s)
-			key := map_key_value(path, sha1)
-			files_map[key] = Fileinfo{name, sha1, f.Size(), path, f.ModTime()}
-		} else {
-			files_map, err = find_files(path, files_map)
+
+			fileInfos[mapKeyValue(path, sha1)] = FileInfo{name, sha1, f.Size(), path, f.ModTime()}
 		}
 	}
-	return files_map, err
+
+	return fileInfos, err
 }
 
-func create_file_manifest(previous_manifest map[string]Fileinfo) (files_map map[string]Fileinfo, err error) {
-	//get files and folders in current directory
-	directory := goBoxDirectory
-	var empty_files_map map[string]Fileinfo
-	empty_files_map = make(map[string]Fileinfo)
-
-	files_map, err = find_files(directory, empty_files_map)
-
-	// Implement a map of path + sha1
-	// When a new manifest is created compare it to the old manifest.
-	// When there are new entires that don't exist in the old manifest,
-	// assume we have to create a new file
-	// Only check files that are modified after the date of the last
-	// manifest, for a small speedup.
-
-	// When there are entires in the old manifest that don't exist in the
-	// current manifest, assume we have to delete a file
-
-	// This ignore chmod changes, and other metadata changes.
-
-	for key, _ := range files_map {
-		// http://stackoverflow.com/questions/2050391/how-to-test-key-existence-in-a-map
-		if _, ok := previous_manifest[key]; !ok {
-			fmt.Println("Need to Upload:", key)
-		}
-	}
-	for key, _ := range previous_manifest {
-		if _, ok := files_map[key]; !ok {
-			fmt.Println("Need to delete:", key)
-		}
-	}
-
-	// fmt.Println(files_slice)
-	// b, err := json.Marshal(files_slice)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("Error with json Marshal of file slice: %s", err)
-	// }
-
-	return files_map, err
+func findFilesInDirectory(directory string) (outputFileInfos map[string]FileInfo, err error) {
+	var emptyFileInfos map[string]FileInfo = make(map[string]FileInfo)
+	return findFilesInDirectoryHelper(directory, emptyFileInfos)
 }
 
-type Fileinfo struct {
+type FileInfo struct {
 	Name     string
 	Hash     string
 	Size     int64
@@ -216,12 +286,11 @@ func watchFiles(watcher *fsnotify.Watcher) {
 			log.Println("event:", event)
 			// f, _ := os.Stat(event.Name)
 			// fmt.Println(f.Name(), f.Size(), f.Mode(), f.IsDir())
-			s, err := file_sha1(event.Name)
+			sha1, err := getSha1FromFilename(event.Name)
 			if err != nil {
 				fmt.Println(err)
 			}
-			fmt.Println(s)
-			// fmt.Println(string(sha1.Sum(file)))
+			fmt.Println(sha1)
 			if event.Op&fsnotify.Write == fsnotify.Write {
 				log.Println("modified file:", event.Name)
 			}
@@ -229,53 +298,4 @@ func watchFiles(watcher *fsnotify.Watcher) {
 			log.Println("error:", err)
 		}
 	}
-}
-
-func new_upload_file() {
-	// send a sha1
-	// if they don't have it, upload the file
-}
-
-func upload_manifest() {
-
-}
-
-func main() {
-	fmt.Println("Running GoBox...")
-	// upload_file(name)
-	var empty_manifest map[string]Fileinfo
-	empty_manifest = make(map[string]Fileinfo)
-
-	manifest_map, err := create_file_manifest(empty_manifest)
-	if err != nil {
-		fmt.Println(err)
-	}
-	if manifest_map != nil {
-		// for key, value := range manifest_map {
-		// 	fmt.Println("Key:", key, "Value:", value)
-		// }
-		fmt.Println("File manifest created")
-	}
-
-	check_for_files()
-
-	// watcher, err := fsnotify.NewWatcher()
-
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer watcher.Close()
-
-	// done := make(chan bool)
-	// fmt.Println("Listening for file changes...")
-	// go watchFiles(watcher)
-	// // directories = getDirsOnPWD
-	// // go recursiveListeners(directories, channel)
-	// // for event range channel { perform operations on event because it happened in some goroutine }
-	// err = watcher.Add(".") // listen in the current directory
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// <-done
-
 }
