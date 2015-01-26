@@ -1,18 +1,12 @@
-// Copyright 2012 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// +build !plan9,!solaris
-
 package main
 
 import (
 	"bytes"
+	"container/heap"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/go-fsnotify/fsnotify"
 	"io"
 	"io/ioutil"
 	"log"
@@ -29,34 +23,70 @@ const (
 	kGoBoxDataDirectory = ".GoBox"
 )
 
+type FileInfo struct {
+	Name     string
+	Hash     string
+	Size     int64
+	Path     string
+	Modified time.Time
+}
+
+type UploadInfo struct {
+	Task string
+	File FileInfo
+}
+
+type UploadHeap []UploadInfo
+
+func (h UploadHeap) Len() int           { return len(h) }
+func (h UploadHeap) Less(i, j int) bool { return 0 > h[i].File.Modified.Sub(h[j].File.Modified) }
+func (h UploadHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+
+func (h *UploadHeap) Push(x interface{}) {
+
+	*h = append(*h, x.(UploadInfo))
+}
+
+func (h *UploadHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
+var uploadQueue *UploadHeap = &UploadHeap{}
+var uploading bool = false
+
 func main() {
 	fmt.Println("Running GoBox...")
 	// upload_file(name)
 	createGoBoxLocalDirectory()
 
+	heap.Init(uploadQueue)
+
 	go monitorFiles()
+
+	go watchAndProcessUploadQueue()
 
 	select {}
 
-	// watcher, err := fsnotify.NewWatcher()
+}
 
-	// if err != nil {
-	//  log.Fatal(err)
-	// }
-	// defer watcher.Close()
-
-	// done := make(chan bool)
-	// fmt.Println("Listening for file changes...")
-	// go watchFiles(watcher)
-	// // directories = getDirsOnPWD
-	// // go recursiveListeners(directories, channel)
-	// // for event range channel { perform operations on event because it happened in some goroutine }
-	// err = watcher.Add(".") // listen in the current directory
-	// if err != nil {
-	//  log.Fatal(err)
-	// }
-	// <-done
-
+func watchAndProcessUploadQueue() {
+	for _ = range time.Tick(10 * time.Second) {
+		fmt.Println("Checking to see if there's anything to upload.")
+		if !uploading && uploadQueue.Len() > 0 {
+			fmt.Println("There are things to upload and we're not already uploading. Let's upload!")
+			uploading = true
+			for uploadQueue.Len() > 0 {
+				popped := heap.Pop(uploadQueue).(UploadInfo)
+				fmt.Println("Uploading task:", popped.Task, popped.File.Name)
+				time.Sleep(time.Second * 60)
+			}
+			uploading = false
+		}
+	}
 }
 
 func createGoBoxLocalDirectory() {
@@ -74,15 +104,6 @@ func createGoBoxLocalDirectory() {
 
 func monitorFiles() {
 
-	// type manifest struct {
-	// 		Map map
-	// 		updateManifest() func
-	// }
-
-	// monitoring class
-	// manifest object class
-	//
-
 	var newFileInfos map[string]FileInfo = make(map[string]FileInfo)
 	var fileInfos map[string]FileInfo = make(map[string]FileInfo)
 
@@ -98,7 +119,7 @@ func monitorFiles() {
 	}
 
 	for _ = range time.Tick(10 * time.Second) {
-
+		fmt.Println("Checking to see if there are any filesystem changes.")
 		newFileInfos, err = findFilesInDirectory(kGoBoxDirectory)
 		if err != nil {
 			fmt.Println(err)
@@ -108,10 +129,11 @@ func monitorFiles() {
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			fmt.Println("Saved data locally")
+			// fmt.Println("Saved data locally")
 		}
 
 		compareFileInfos(fileInfos, newFileInfos)
+
 		fileInfos = newFileInfos
 	}
 }
@@ -128,15 +150,17 @@ func writeFileInfosToLocalFile(fileInfos map[string]FileInfo) error {
 
 func compareFileInfos(fileInfos map[string]FileInfo, newFileInfos map[string]FileInfo) {
 
-	for key, _ := range newFileInfos {
+	for key, value := range newFileInfos {
 		// http://stackoverflow.com/questions/2050391/how-to-test-key-existence-in-a-map
 		if _, exists := fileInfos[key]; !exists {
 			fmt.Println("Need to Upload:", key)
+			heap.Push(uploadQueue, UploadInfo{"Upload", value})
 		}
 	}
-	for key, _ := range fileInfos {
+	for key, value := range fileInfos {
 		if _, exists := newFileInfos[key]; !exists {
 			fmt.Println("Need to delete:", key)
+			heap.Push(uploadQueue, UploadInfo{"Delete", value})
 		}
 	}
 }
@@ -214,23 +238,6 @@ func uploadFile(name string) (*http.Response, error) {
 	return client.Do(request)
 }
 
-// http://jxck.hatenablog.com/entry/golang-error-handling-lesson-by-rob-pike
-// type errWriter struct {
-// 	w   io.Writer
-// 	err error
-// }
-
-// func (e *errWriter) Write(p []byte) {
-// 	if e.err != nil {
-// 		return
-// 	}
-// 	_, e.err = e.w.Write(p)
-// }
-
-// func (e *errWriter) Err() error {
-// 	return e.err
-// }
-
 func mapKeyValue(path string, sha256 string) (key string) {
 	return path + "-" + sha256
 }
@@ -266,37 +273,4 @@ func findFilesInDirectoryHelper(directory string, fileInfos map[string]FileInfo)
 func findFilesInDirectory(directory string) (outputFileInfos map[string]FileInfo, err error) {
 	var emptyFileInfos map[string]FileInfo = make(map[string]FileInfo)
 	return findFilesInDirectoryHelper(directory, emptyFileInfos)
-}
-
-type FileInfo struct {
-	Name     string
-	Hash     string
-	Size     int64
-	Path     string
-	Modified time.Time
-}
-
-func watchFiles(watcher *fsnotify.Watcher) {
-	// watches files in the current directory
-	// this should potentially be used to listed for general changes on the
-	// filesystem, but is too noisy to be used to calculate the index and
-	// trigger uploads
-	for {
-		select {
-		case event := <-watcher.Events:
-			log.Println("event:", event)
-			// f, _ := os.Stat(event.Name)
-			// fmt.Println(f.Name(), f.Size(), f.Mode(), f.IsDir())
-			sha256, err := getSha256FromFilename(event.Name)
-			if err != nil {
-				fmt.Println(err)
-			}
-			fmt.Println(sha256)
-			if event.Op&fsnotify.Write == fsnotify.Write {
-				log.Println("modified file:", event.Name)
-			}
-		case err := <-watcher.Errors:
-			log.Println("error:", err)
-		}
-	}
 }
