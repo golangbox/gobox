@@ -8,7 +8,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -36,6 +36,8 @@ func main() {
 
 	go monitorFiles()
 
+	select {}
+
 	// watcher, err := fsnotify.NewWatcher()
 
 	// if err != nil {
@@ -55,7 +57,6 @@ func main() {
 	// }
 	// <-done
 
-	select {}
 }
 
 func createGoBoxLocalDirectory() {
@@ -170,27 +171,27 @@ func newfileUploadRequest(uri string, params map[string]string, paramName, path 
 	return req, err
 }
 
-func getSha1FromFilename(filename string) (sha1_string string, err error) {
+func getSha256FromFilename(filename string) (sha256_string string, err error) {
 	file, err := ioutil.ReadFile(filename)
 	if err != nil {
-		return "", fmt.Errorf("Error reading file for sha1: %s", err)
+		return "", fmt.Errorf("Error reading file for sha256: %s", err)
 	}
-	h := sha1.New()
+	h := sha256.New()
 	_, err = h.Write(file)
 	if err != nil {
-		return "", fmt.Errorf("Error writing file to hash for sha1: %s", err)
+		return "", fmt.Errorf("Error writing file to hash for sha256: %s", err)
 	}
 	byte_string := h.Sum(nil)
 
-	sha1_string = hex.EncodeToString(byte_string)
+	sha256_string = hex.EncodeToString(byte_string)
 
-	return sha1_string, nil
+	return sha256_string, nil
 }
 
 func uploadFile(name string) (*http.Response, error) {
 	// filename := "main.go"
 	file, _ := os.Stat(name)
-	s, err := getSha1FromFilename(name)
+	s, err := getSha256FromFilename(name)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -230,8 +231,8 @@ func uploadFile(name string) (*http.Response, error) {
 // 	return e.err
 // }
 
-func mapKeyValue(path string, sha1 string) (key string) {
-	return path + "-" + sha1
+func mapKeyValue(path string, sha256 string) (key string) {
+	return path + "-" + sha256
 }
 
 func findFilesInDirectoryHelper(directory string, fileInfos map[string]FileInfo) (outputFileInfos map[string]FileInfo, err error) {
@@ -250,12 +251,12 @@ func findFilesInDirectoryHelper(directory string, fileInfos map[string]FileInfo)
 				fileInfos, err = findFilesInDirectoryHelper(path, fileInfos)
 			}
 		} else {
-			sha1, err := getSha1FromFilename(path)
+			sha256, err := getSha256FromFilename(path)
 			if err != nil {
 				fmt.Println(err)
 			}
 
-			fileInfos[mapKeyValue(path, sha1)] = FileInfo{name, sha1, f.Size(), path, f.ModTime()}
+			fileInfos[mapKeyValue(path, sha256)] = FileInfo{name, sha256, f.Size(), path, f.ModTime()}
 		}
 	}
 
@@ -286,11 +287,11 @@ func watchFiles(watcher *fsnotify.Watcher) {
 			log.Println("event:", event)
 			// f, _ := os.Stat(event.Name)
 			// fmt.Println(f.Name(), f.Size(), f.Mode(), f.IsDir())
-			sha1, err := getSha1FromFilename(event.Name)
+			sha256, err := getSha256FromFilename(event.Name)
 			if err != nil {
 				fmt.Println(err)
 			}
-			fmt.Println(sha1)
+			fmt.Println(sha256)
 			if event.Op&fsnotify.Write == fsnotify.Write {
 				log.Println("modified file:", event.Name)
 			}
