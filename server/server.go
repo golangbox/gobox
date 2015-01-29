@@ -2,17 +2,28 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 type file struct {
 	name string
 	hash string
 	size int64
+}
+
+type fileInfo struct {
+	Name     string
+	Hash     string
+	Size     int64
+	Path     string
+	Modified time.Time
 }
 
 var f1 = file{"file1", "sjdalkjsda", 1234}
@@ -85,18 +96,52 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func writeLocalMeta(fileMeta []byte) {
+	f, err := os.OpenFile("localMeta.gob", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		panic(err)
+	}
+
+	defer f.Close()
+
+	if _, err = f.WriteString(string(fileMeta) + "\n"); err != nil {
+		panic(err)
+	}
+}
+
+func handleMetaConnection(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+
+	case "GET":
+		log.Println("[+] GET REQUEST RECEIVED")
+
+	case "POST":
+		log.Println("[+] POST REQUEST RECEIVED")
+		contents, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			panic("Error")
+		}
+		writeLocalMeta(contents)
+
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+
+	}
+}
+
 // filename, size, sha-1
 
 func main() {
-	log.Println("Server up...")
-
+	fmt.Println("Server up...")
 	http.HandleFunc("/upload", uploadHandler)
 
 	http.HandleFunc("/files", fileListHandler)
+
+	http.HandleFunc("/meta", handleMetaConnection)
 
 	//static file handler.
 	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 
 	//Listen on port 8080
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(":4243", nil)
 }

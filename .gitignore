@@ -1,6 +1,7 @@
 tmp/
 server
 client
+localMeta.gob
 
 .*.*.sw*
 .GoBox
