@@ -3,21 +3,20 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"html/template"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/mitchellh/goamz/aws"
+	"github.com/mitchellh/goamz/s3"
 )
 
-type file struct {
-	name string
-	hash string
-	size int64
+type uploadInfo struct {
+	Task string
+	File fileInfo
 }
-
 type fileInfo struct {
 	Name     string
 	Hash     string
@@ -26,78 +25,9 @@ type fileInfo struct {
 	Modified time.Time
 }
 
-var f1 = file{"file1", "sjdalkjsda", 1234}
-var f2 = file{"file2", "lkjlkjlkl", 4321}
-var allFiles = map[string]file{"file1": f1, "file2": f2}
-
-//Compile templates on start
-var templates = template.Must(template.ParseFiles("templates/upload.html"))
-
-//Display the named template
-func display(w http.ResponseWriter, tmpl string, data interface{}) {
-	templates.ExecuteTemplate(w, tmpl+".html", data)
-}
-
-func fileListHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(allFiles)
-}
-
-//This is where the action happens.
-func uploadHandler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	//GET displays the upload form.
-	case "GET":
-		log.Println("Get...")
-		display(w, "upload", nil)
-
-	//POST takes the uploaded file(s) and saves it to disk.
-	case "POST":
-		//get the multipart reader for the request.
-		reader, err := r.MultipartReader()
-
-		log.Println("Receiving stuff...")
-		//hash := r.FormValue("sha-1")
-
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		//copy each part to destination.
-		for {
-			part, err := reader.NextPart()
-			if err == io.EOF {
-				break
-			}
-
-			//if part.FileName() is empty, skip this iteration.
-			if part.FileName() == "" {
-				continue
-			}
-
-			dst, err := os.Create("/Users/partec/hackerschool/go/gobox/tmp/" + part.FileName())
-			defer dst.Close()
-
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-
-			if _, err := io.Copy(dst, part); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-		}
-		//display success message.
-		display(w, "upload", "Upload successful.")
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
 func writeLocalMeta(fileMeta []byte) {
-	f, err := os.OpenFile("localMeta.gob", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	f, err := os.OpenFile("localMeta.gob",
+		os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		panic(err)
 	}
@@ -107,6 +37,40 @@ func writeLocalMeta(fileMeta []byte) {
 	if _, err = f.WriteString(string(fileMeta) + "\n"); err != nil {
 		panic(err)
 	}
+}
+
+func evalAction(contents []byte) {
+	var uploadData uploadInfo
+
+	err := json.Unmarshal(contents, &uploadData)
+	fileMeta := uploadData.File
+
+	if err != nil {
+		fmt.Errorf("Error: %s", err)
+	}
+
+	switch uploadData.Task {
+	case "upload":
+		fmt.Printf("[*]Uploading %s to S3...", fileMeta.Name)
+	}
+}
+
+func authOnS3() {
+	key := os.Getenv("GOBOX_AWS_ACCESS_KEY_ID")
+	secret := os.Getenv("GOBOX_AWS_SECRET_ACCESS_KEY")
+
+	auth, err := aws.GetAuth(key, secret)
+	if err != nil {
+		log.Fatal(err)
+	}
+	client := s3.New(auth, aws.USEast)
+	resp, err := client.ListBuckets()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Print(fmt.Sprintf("%T %+v", resp.Buckets[0], resp.Buckets[0]))
 }
 
 func handleMetaConnection(w http.ResponseWriter, r *http.Request) {
@@ -122,6 +86,7 @@ func handleMetaConnection(w http.ResponseWriter, r *http.Request) {
 			panic("Error")
 		}
 		writeLocalMeta(contents)
+		evalAction(contents)
 
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -129,19 +94,22 @@ func handleMetaConnection(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// filename, size, sha-1
-
 func main() {
-	fmt.Println("Server up...")
-	http.HandleFunc("/upload", uploadHandler)
+	fmt.Println("[+] Server Initialized on port: 4243")
+	//// Upload endpoint
+	//http.HandleFunc("/upload", uploadHandler)
 
-	http.HandleFunc("/files", fileListHandler)
+	//// files endpoint
+	//http.HandleFunc("/files", fileListHandler)
 
+	// meta endpoint
 	http.HandleFunc("/meta", handleMetaConnection)
 
 	//static file handler.
-	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
-
-	//Listen on port 8080
+	http.Handle("/assets/",
+		http.StripPrefix("/assets/",
+			http.FileServer(http.Dir("assets"))))
+	authOnS3()
+	//Listen
 	http.ListenAndServe(":4243", nil)
 }
