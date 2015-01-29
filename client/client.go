@@ -21,6 +21,9 @@ import (
 const (
 	goBoxDirectory     = "."
 	goBoxDataDirectory = ".GoBox"
+	serverEndpoint     = "http://2c41d9d9.ngrok.com"
+	// serverEndpoint           = "http://www.google.com"
+	filesystemCheckFrequency = 5
 )
 
 type fileInfo struct {
@@ -67,22 +70,23 @@ func main() {
 
 	go monitorFiles()
 
-	go watchAndProcessUploadQueue()
-
+	// go watchAndProcessUploadQueue()
+	//ghjkgh
 	select {}
 
 }
 
 func watchAndProcessUploadQueue() {
-	for _ = range time.Tick(10 * time.Second) {
-		fmt.Println("Checking to see if there's anything to upload.")
+	for _ = range time.Tick(filesystemCheckFrequency * time.Second) {
+		// fmt.Println("Checking to see if there's anything to upload.")
 		if !uploading && uploadQueue.Len() > 0 {
-			fmt.Println("There are things to upload and we're not already uploading. Let's upload!")
+			// fmt.Println("There are things to upload and we're not already uploading. Let's upload!")
 			uploading = true
 			for uploadQueue.Len() > 0 {
-				popped := heap.Pop(uploadQueue).(uploadInfo)
-				fmt.Println("Uploading task:", popped.Task, popped.File.Name)
-				time.Sleep(time.Second * 60)
+				poppedFileInfo := heap.Pop(uploadQueue).(uploadInfo)
+				_ = poppedFileInfo
+				// resp, err := uploadMetadata(poppedFileInfo)
+				// fmt.Println(resp, err)
 			}
 			uploading = false
 		}
@@ -118,23 +122,26 @@ func monitorFiles() {
 		}
 	}
 
-	for _ = range time.Tick(10 * time.Second) {
+	for _ = range time.Tick(filesystemCheckFrequency * time.Second) {
 		fmt.Println("Checking to see if there are any filesystem changes.")
 		newfileInfos, err = findFilesInDirectory(goBoxDirectory)
 		if err != nil {
 			fmt.Println(err)
 		}
-
-		err = writefileInfosToLocalFile(newfileInfos)
+		err := comparefileInfos(fileInfos, newfileInfos)
 		if err != nil {
 			fmt.Println(err)
+			fmt.Println("Error uploading file changes, skipping this upload cycle")
 		} else {
-			// fmt.Println("Saved data locally")
+			//sadfasdfasdfsa
+			err = writefileInfosToLocalFile(newfileInfos)
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				// fmt.Println("Saved data locally")
+			}
+			fileInfos = newfileInfos
 		}
-
-		comparefileInfos(fileInfos, newfileInfos)
-
-		fileInfos = newfileInfos
 	}
 }
 
@@ -148,22 +155,60 @@ func writefileInfosToLocalFile(fileInfos map[string]fileInfo) error {
 	return err
 }
 
+func handleFileChange(action string, file fileInfo) (err error) {
+	infoToSend := uploadInfo{action, file}
+	heap.Push(uploadQueue, infoToSend)
+	resp, err := uploadMetadata(infoToSend)
+	if err != nil {
+		return
+	}
+	if resp.StatusCode != 200 {
+		err = fmt.Errorf("Error uploading metadata, status code: %d", resp.StatusCode)
+		return
+	}
+
+	// resp, err :=
+	return err
+	// fmt.Println(resp)
+	//asdfsdaf
+}
+
+func uploadMetadata(uploadinfo uploadInfo) (resp *http.Response, err error) {
+	fmt.Println("Uploading metadata: ("+uploadinfo.Task, uploadinfo.File.Name+")")
+	jsonBytes, err := json.Marshal(uploadinfo)
+	if err != nil {
+		return
+	}
+	resp, err = http.Post(serverEndpoint+"/meta", "application/json", bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return
+	}
+	return
+}
+
 func comparefileInfos(fileInfos map[string]fileInfo,
-	newfileInfos map[string]fileInfo) {
+	newfileInfos map[string]fileInfo) (err error) {
 
 	for key, value := range newfileInfos {
 		// http://stackoverflow.com/questions/2050391/how-to-test-key-existence-in-a-map
 		if _, exists := fileInfos[key]; !exists {
-			fmt.Println("Need to Upload:", key)
-			heap.Push(uploadQueue, uploadInfo{"Upload", value})
+			fmt.Println("Need to Upload:", value.Name)
+			err = handleFileChange("upload", value)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	for key, value := range fileInfos {
 		if _, exists := newfileInfos[key]; !exists {
 			fmt.Println("Need to delete:", key)
-			heap.Push(uploadQueue, uploadInfo{"Delete", value})
+			err = handleFileChange("delete", value)
+			if err != nil {
+				return err
+			}
 		}
 	}
+	return err
 }
 
 // http://matt.aimonetti.net/posts/2013/07/01/golang-multipart-file-upload-example/
@@ -231,9 +276,9 @@ func uploadFile(name string) (*http.Response, error) {
 	}
 
 	// http://requestb.in/19w82ne1
-	//"http://10.0.7.205:8080/upload"
+	//"http://10.0.7.205:4242/upload"
 	request, err :=
-		newfileUploadRequest("http://10.0.7.205:8080/upload",
+		newfileUploadRequest("http://10.0.7.205:4242/upload",
 			extraParams, "FileName", name)
 	if err != nil {
 		return nil, err
