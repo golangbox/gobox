@@ -1,10 +1,58 @@
 package boxtools
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jinzhu/gorm"
+	_ "github.com/lib/pq"
 )
+
+const (
+	email    = "max.t.mcdonnell@gmail.com"
+	password = "password"
+)
+
+var db gorm.DB
+
+func init() {
+	var err error
+	db, err = gorm.Open("postgres", "dbname=goboxtest sslmode=disable")
+	db.AutoMigrate(&User{})
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func TestUserCreation(t *testing.T) {
+	user, err := NewUser(email, password, db)
+	if err != nil {
+		t.Error(err)
+	}
+	if user.Email != email {
+		t.Fail()
+	}
+	if user.HashedPassword == "" {
+		t.Fail()
+	}
+
+	fmt.Println("passed: TestUserCreation")
+}
+
+func TestPasswordValidation(t *testing.T) {
+	user, err := ValidateUserPassword(email, password, db)
+	if err != nil {
+		t.Error(err)
+	}
+	if user.Email != email {
+		t.Fail()
+	}
+	// clean up created user
+	db.Where("email = ?", email).Delete(User{})
+	fmt.Println("passed: TestPasswordValidation")
+}
 
 func TestJsonMetaConversion(t *testing.T) {
 	// if testing.Short() {
@@ -34,6 +82,7 @@ func TestJsonMetaConversion(t *testing.T) {
 	} else {
 		t.Fail()
 	}
+	fmt.Println("passed: TestJsonMetaConversion")
 }
 
 func TestRemoveRedundancy(t *testing.T) {
@@ -90,4 +139,6 @@ func TestRemoveRedundancy(t *testing.T) {
 	if computedResultJson != resultJson {
 		t.Fail()
 	}
+
+	fmt.Println("passed: TestRemoveRedundancy")
 }

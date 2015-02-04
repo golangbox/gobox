@@ -4,14 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/jinzhu/gorm"
+
+	"code.google.com/p/go.crypto/bcrypt"
 )
 
 type User struct {
-	Id        int64
-	Name      string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt time.Time
+	Id             int64
+	Email          string `sql:"type:text;"`
+	HashedPassword string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type Client struct {
@@ -57,6 +61,43 @@ type FileInfo struct {
 type UploadInfo struct {
 	Task string
 	File FileInfo
+}
+
+func NewUser(email string, password string, db gorm.DB) (user User, err error) {
+	hash, err := hashPassword(password)
+	if err != nil {
+		return
+	}
+	user = User{
+		Email:          email,
+		HashedPassword: hash,
+	}
+	query := db.Create(&user)
+	if query.Error != nil {
+		return user, query.Error
+	}
+	return
+}
+
+func ValidateUserPassword(email, password string, db gorm.DB) (user User, err error) {
+	db.Where("email = ?", email).First(&user)
+	bytePassword := []byte(password)
+	byteHash := []byte(user.HashedPassword)
+	err = bcrypt.CompareHashAndPassword(byteHash, bytePassword)
+	return user, err
+}
+
+func clear(b []byte) {
+	for i := 0; i < len(b); i++ {
+		b[i] = 0
+	}
+}
+
+func hashPassword(password string) (hash string, err error) {
+	bytePassword := []byte(password)
+	defer clear(bytePassword)
+	byteHash, err := bcrypt.GenerateFromPassword(bytePassword, bcrypt.DefaultCost)
+	return string(byteHash), err
 }
 
 func ConvertJsonStringToMetaStruct(jsonMeta string) (metadata Meta, err error) {
