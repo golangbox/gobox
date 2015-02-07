@@ -21,11 +21,50 @@ func init() {
 	var err error
 	db, err = gorm.Open("postgres", "dbname=goboxtest sslmode=disable")
 	db.DropTableIfExists(&User{})
+	db.DropTableIfExists(&File{})
 	db.AutoMigrate(&User{})
+	db.AutoMigrate(&File{})
 	if err != nil {
 		fmt.Println(err)
 	}
 }
+
+func TestDBFindFile(t *testing.T) {
+	testMeta := Meta{
+		0,
+		"commit",
+		"what is name for?",
+		"854eaaae4dc9ad3eef2fd235587d9d6e71c168e9b7b6624f41aa650fb87d0a87",
+		8014,
+		"./client.go",
+		time.Now(),
+		time.Now(),
+		time.Now(),
+	}
+	DBFindFile(testMeta, db)
+
+	t.Fail()
+}
+
+// func TestDBCreateFileFromMetaStruct(t *testing.T) {
+// 	testMeta := Meta{
+// 		0,
+// 		"commit",
+// 		"what is name for?",
+// 		"854eaaae4dc9ad3eef2fd235587d9d6e71c168e9b7b6624f41aa650fb87d0a87",
+// 		8014,
+// 		"./client.go",
+// 		time.Now(),
+// 		time.Now(),
+// 		time.Now(),
+// 	}
+
+// }
+
+// func TestDBFindFile(t *testing.T) {
+
+// 	fileid, ok = DBFindFile(
+// }
 
 func TestUserCreation(t *testing.T) {
 	user, err := NewUser(email, password, db)

@@ -3,6 +3,7 @@ package boxtools
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -19,16 +20,28 @@ type User struct {
 }
 
 type Client struct {
-	Id        int64
-	User_id   int64
+	ID        int64
+	UserID    int64
 	Key       string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt time.Time
 }
 
+type JournalEntry struct {
+	ID     int64
+	Task   string
+	FileID int64
+}
+
+type CurrentFile struct {
+	ID     int64
+	UserID int64
+	FileID int64
+}
+
 type Meta struct {
-	Client_id int64
+	ClientID  int64
 	Task      string
 	Name      string
 	Hash      string
@@ -40,7 +53,7 @@ type Meta struct {
 }
 
 type File struct {
-	User_id   int64
+	ID        int64
 	Name      string
 	Hash      string
 	Size      int64
@@ -61,6 +74,58 @@ type FileInfo struct {
 type UploadInfo struct {
 	Task string
 	File FileInfo
+}
+
+func Introspect(m interface{}) {
+	typ := reflect.TypeOf(m)
+
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	if typ.Kind() != reflect.Struct {
+		fmt.Printf("%v type can't have attributes inspected\n", typ.Kind())
+		return
+	}
+
+	for i := 0; i < typ.NumField(); i++ {
+		p := typ.Field(i)
+		if !p.Anonymous {
+			fmt.Println(p.Name, p.Type)
+		}
+	}
+
+}
+
+func DBCreateFileFromMetaStruct(metaStruct Meta, db gorm.DB) (fileStruct File, err error) {
+	file := File{
+		Name:      metaStruct.Name,
+		Hash:      metaStruct.Hash,
+		Size:      metaStruct.Size,
+		Path:      metaStruct.Path,
+		Modified:  metaStruct.Modified,
+		CreatedAt: metaStruct.CreatedAt,
+		UpdatedAt: metaStruct.UpdatedAt,
+	}
+	query := db.Create(&file)
+	if query.Error != nil {
+		return file, query.Error
+	}
+	return file, err
+}
+
+func DBFindFile(metaStruct Meta, db gorm.DB) (fileStruct File, err error) {
+	file := File{}
+	query := db.Where("hash = ?", metaStruct.Hash).First(&file)
+
+	Introspect(query)
+	if query.Error != nil {
+		return file, query.Error
+	}
+
+	fmt.Println("Here's the file: ", file)
+
+	return file, err
 }
 
 func NewUser(email string, password string, db gorm.DB) (user User, err error) {
@@ -140,18 +205,19 @@ func ConvertMetaStructToJsonString(metaStruct Meta) (metaJson string, err error)
 	return
 }
 
-func ConvertMetaStructToFileStruct(metaStruct Meta) (fileStruct File, err error) {
-	return File{
-		metaStruct.Client_id, //WRONG
-		metaStruct.Name,
-		metaStruct.Hash,
-		metaStruct.Size,
-		metaStruct.Path,
-		metaStruct.Modified,
-		time.Now(),
-		time.Now(),
-	}, err
-}
+// func ConvertMetaStructToFileStruct(metaStruct Meta) (fileStruct File, err error) {
+// 	return File{
+
+// 		metaStruct.ClientID, //WRONG
+// 		metaStruct.Name,
+// 		metaStruct.Hash,
+// 		metaStruct.Size,
+// 		metaStruct.Path,
+// 		metaStruct.Modified,
+// 		time.Now(),
+// 		time.Now(),
+// 	}, err
+// }
 
 func RemoveRedundancyFromMetadata(metadata []Meta) (simplifiedMetadata []Meta) {
 	// removing redundancy
