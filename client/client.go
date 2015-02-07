@@ -19,6 +19,15 @@ import (
 	"time"
 )
 
+// how will client locate the server without hard-coding anything?
+
+// if we create a new gobox wherever client is executed, couldn't this have some
+// bad consequences?
+
+// if we only allow one dropbox folder per computer, testing will become VERY challenging
+// because theres no way to automate a system where we spin up a server with a fresh db
+// and hammer it with a bunch of local clients via localhost
+
 const (
 	goBoxDirectory     = "."
 	goBoxDataDirectory = ".GoBox"
