@@ -95,7 +95,7 @@ func handleMetaConnection(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	fmt.Println("[+] Server Initialized on port: 4243")
+
 	//// Upload endpoint
 	//http.HandleFunc("/upload", uploadHandler)
 
@@ -109,7 +109,9 @@ func main() {
 	http.Handle("/assets/",
 		http.StripPrefix("/assets/",
 			http.FileServer(http.Dir("assets"))))
-	authOnS3()
+	// authOnS3()
 	//Listen
+	fmt.Println("[+] Server Initialized on port: 4243")
 	http.ListenAndServe(":4243", nil)
+
 }
