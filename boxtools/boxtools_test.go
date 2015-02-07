@@ -20,6 +20,7 @@ var db gorm.DB
 func init() {
 	var err error
 	db, err = gorm.Open("postgres", "dbname=goboxtest sslmode=disable")
+	db.DropTableIfExists(&User{})
 	db.AutoMigrate(&User{})
 	if err != nil {
 		fmt.Println(err)
