@@ -22,14 +22,16 @@ func init() {
 	db, err = gorm.Open("postgres", "dbname=goboxtest sslmode=disable")
 	db.DropTableIfExists(&User{})
 	db.DropTableIfExists(&File{})
+	db.DropTableIfExists(&JournalEntry{})
 	db.AutoMigrate(&User{})
 	db.AutoMigrate(&File{})
+	db.AutoMigrate(&JournalEntry{})
 	if err != nil {
 		fmt.Println(err)
 	}
 }
 
-func TestDBFindFile(t *testing.T) {
+func TestDBFindFileReturnsErrorWhenNotFound(t *testing.T) {
 	testMeta := Meta{
 		0,
 		"commit",
@@ -41,30 +43,87 @@ func TestDBFindFile(t *testing.T) {
 		time.Now(),
 		time.Now(),
 	}
-	DBFindFile(testMeta, db)
+	_, err := DBFindFile(testMeta, db)
+	if err == nil {
+		t.Fail()
+	}
+	fmt.Println("passed: TestDBFindFileReturnsErrorWhenNotFound")
 
-	t.Fail()
 }
 
-// func TestDBCreateFileFromMetaStruct(t *testing.T) {
-// 	testMeta := Meta{
-// 		0,
-// 		"commit",
-// 		"what is name for?",
-// 		"854eaaae4dc9ad3eef2fd235587d9d6e71c168e9b7b6624f41aa650fb87d0a87",
-// 		8014,
-// 		"./client.go",
-// 		time.Now(),
-// 		time.Now(),
-// 		time.Now(),
-// 	}
+func TestDBFindFileWorksWhenFileExists(t *testing.T) {
+	testMeta := Meta{
+		0,
+		"commit",
+		"what is name for?",
+		"854eaaae4dc9ad3eef2fd235587d9d6e71c168e9b7b6624f41aa650fb87d0a87",
+		8014,
+		"./client.go",
+		time.Now(),
+		time.Now(),
+		time.Now(),
+	}
+	_, err := DBCreateFileFromMetaStruct(testMeta, db)
+	if err != nil {
+		t.Log("File was not created successfully")
+		t.FailNow()
+	}
 
-// }
+	_, err1 := DBFindFile(testMeta, db)
+	if err1 != nil {
+		t.Log("File was created successfully but not found by DBFindFile")
+		t.FailNow()
+	}
+	fmt.Println("passed: TestDBFindFileWorksWhenFileExists")
+}
 
-// func TestDBFindFile(t *testing.T) {
+func TestDBCreateFileFromMetaStruct(t *testing.T) {
+	testMeta := Meta{
+		0,
+		"commit",
+		"what is name for?",
+		"854eaaae4dc9ad3eef2fd235587d9d6e71c168e9b7b6624f41aa650fb87d0a87",
+		8014,
+		"./client.go",
+		time.Now(),
+		time.Now(),
+		time.Now(),
+	}
+	_, err := ConvertMetaStructToFileStruct(testMeta)
+	if err != nil {
+		t.Log("Conversion from Meta to File did not work properly")
+		t.FailNow()
+	}
+	fmt.Println("passed: TestConvertMetaStructToFileStruct")
 
-// 	fileid, ok = DBFindFile(
-// }
+}
+
+func TestCreateJournalEntryFromMeta(t *testing.T) {
+	testMeta := Meta{
+		0,
+		"commit",
+		"what is name for?",
+		"854eaaae4dc9ad3eef2fd235587d9d6e71c168e9b7b6624f41aa650fb87d0a87",
+		8014,
+		"./client.go",
+		time.Now(),
+		time.Now(),
+		time.Now(),
+	}
+	_, err := CreateJournalEntryFromMeta(testMeta, db)
+	if err != nil {
+		t.Log("CreateJournalEntry raised an error on creation")
+	}
+
+}
+
+func TestDBCreateJournalEntry(t *testing.T) {
+	_, err := DBCreateJournalEntry("commit", 1, db)
+	if err != nil {
+		t.Log("Couldn't properly create a JournalEntry in the database")
+		t.FailNow()
+	}
+}
 
 func TestUserCreation(t *testing.T) {
 	user, err := NewUser(email, password, db)

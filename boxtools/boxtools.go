@@ -3,7 +3,7 @@ package boxtools
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
+	// "reflect"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -76,29 +76,8 @@ type UploadInfo struct {
 	File FileInfo
 }
 
-func Introspect(m interface{}) {
-	typ := reflect.TypeOf(m)
-
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-
-	if typ.Kind() != reflect.Struct {
-		fmt.Printf("%v type can't have attributes inspected\n", typ.Kind())
-		return
-	}
-
-	for i := 0; i < typ.NumField(); i++ {
-		p := typ.Field(i)
-		if !p.Anonymous {
-			fmt.Println(p.Name, p.Type)
-		}
-	}
-
-}
-
-func DBCreateFileFromMetaStruct(metaStruct Meta, db gorm.DB) (fileStruct File, err error) {
-	file := File{
+func ConvertMetaStructToFileStruct(metaStruct Meta) (fileStruct File, err error) {
+	return File{
 		Name:      metaStruct.Name,
 		Hash:      metaStruct.Hash,
 		Size:      metaStruct.Size,
@@ -106,25 +85,45 @@ func DBCreateFileFromMetaStruct(metaStruct Meta, db gorm.DB) (fileStruct File, e
 		Modified:  metaStruct.Modified,
 		CreatedAt: metaStruct.CreatedAt,
 		UpdatedAt: metaStruct.UpdatedAt,
+	}, err
+}
+
+func DBCreateFileFromMetaStruct(metaStruct Meta, db gorm.DB) (File, error) {
+	file, err := ConvertMetaStructToFileStruct(metaStruct)
+	if err != nil {
+		return file, err
 	}
-	query := db.Create(&file)
+
+	query := db.FirstOrCreate(&file)
 	if query.Error != nil {
 		return file, query.Error
 	}
 	return file, err
 }
 
-func DBFindFile(metaStruct Meta, db gorm.DB) (fileStruct File, err error) {
-	file := File{}
+func DBCreateJournalEntry(task string, fileID int64, db gorm.DB) (JournalEntry, error) {
+	journalStruct := JournalEntry{
+		Task:   task,
+		FileID: fileID,
+	}
+	query := db.Create(journalStruct)
+	return journalStruct, query.Error
+}
+
+func CreateJournalEntryFromMeta(metaStruct Meta, db gorm.DB) (JournalEntry, error) {
+	file, err := DBCreateFileFromMetaStruct(metaStruct, db)
+	if err != nil {
+		return JournalEntry{}, err
+	}
+	return DBCreateJournalEntry(metaStruct.Task, file.ID, db)
+}
+
+func DBFindFile(metaStruct Meta, db gorm.DB) (file File, err error) {
 	query := db.Where("hash = ?", metaStruct.Hash).First(&file)
 
-	Introspect(query)
 	if query.Error != nil {
 		return file, query.Error
 	}
-
-	fmt.Println("Here's the file: ", file)
-
 	return file, err
 }
 
@@ -204,20 +203,6 @@ func ConvertMetaStructToJsonString(metaStruct Meta) (metaJson string, err error)
 	metaJson = string(jsonBytes)
 	return
 }
-
-// func ConvertMetaStructToFileStruct(metaStruct Meta) (fileStruct File, err error) {
-// 	return File{
-
-// 		metaStruct.ClientID, //WRONG
-// 		metaStruct.Name,
-// 		metaStruct.Hash,
-// 		metaStruct.Size,
-// 		metaStruct.Path,
-// 		metaStruct.Modified,
-// 		time.Now(),
-// 		time.Now(),
-// 	}, err
-// }
 
 func RemoveRedundancyFromMetadata(metadata []Meta) (simplifiedMetadata []Meta) {
 	// removing redundancy
