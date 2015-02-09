@@ -3,6 +3,9 @@
 ## Setup
  - Must have `GOBOX_AWS_ACCESS_KEY_ID` and `GOBOX_AWS_SECRET_ACCESS_KEY` set for aws client. 
 
+## Notes
+ - os.FileMode struct has all the information me need to handle files. symlink, permission, directory, etc....
+
 ## Api
 
 #### Server

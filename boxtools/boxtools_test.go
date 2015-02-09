@@ -41,6 +41,12 @@ func TestUserCreation(t *testing.T) {
 	fmt.Println("passed: TestUserCreation")
 }
 
+func TestClientCreation(t *testing.T) {
+	var user User
+	db.Where("email = ?", email).Find(&user)
+	fmt.Println(NewClientKey())
+}
+
 func TestPasswordValidation(t *testing.T) {
 	user, err := ValidateUserPassword(email, password, db)
 	if err != nil {
@@ -110,7 +116,7 @@ func TestRemoveRedundancy(t *testing.T) {
 	jsonSlice := strings.Split(testJsons, "\n")
 	var metaSlice []Meta
 	for _, jsonMetaString := range jsonSlice {
-		metaFromJson, err := ConvertJsonStringToMetaStruct(jsonMetaString)
+		metaFromJson, err := ConvertJsonStringToMetaStruct(jsonMetaString, client)
 		if err != nil {
 			t.Error(err)
 		}
@@ -124,7 +130,7 @@ func TestRemoveRedundancy(t *testing.T) {
 	}
 	var computedResultJson string
 	for _, metaStruct := range simplifiedMetadata {
-		newString, err := ConvertMetaStructToJsonString(metaStruct)
+		newString := ConvertMetaStructToJsonString(metaStruct, db)
 		if err != nil {
 			t.Error(err)
 		}

@@ -175,10 +175,16 @@ func uploadMetadata(uploadinfo boxtools.UploadInfo) (resp *http.Response, err er
 	if uploadinfo.Task == "upload" {
 		var contents []byte
 		contents, err = ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
+		err := resp.Body.Close()
+		if err != nil {
+			return
+		}
 		fmt.Println(string(contents))
 		if string(contents) == "true" {
 			resp, err = uploadFile(uploadinfo.File.Path)
+			if err != nil {
+				return
+			}
 		} else {
 			fmt.Println("no need for upload")
 		}

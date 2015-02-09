@@ -3,65 +3,15 @@ package boxtools
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/jinzhu/gorm"
 
+	"crypto/sha1"
+
 	"code.google.com/p/go.crypto/bcrypt"
 )
-
-type User struct {
-	Id             int64
-	Email          string `sql:"type:text;"`
-	HashedPassword string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-}
-
-type Client struct {
-	Id        int64
-	User_id   int64
-	Key       string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt time.Time
-}
-
-type Meta struct {
-	Client_id int64
-	Task      string
-	Name      string
-	Hash      string
-	Size      int64
-	Path      string `sql:"type:text;"`
-	Modified  time.Time
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-type File struct {
-	User_id   int64
-	Name      string
-	Hash      string
-	Size      int64
-	Path      string `sql:"type:text;"`
-	Modified  time.Time
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-type FileInfo struct {
-	Name     string
-	Hash     string
-	Size     int64
-	Path     string
-	Modified time.Time
-}
-
-type UploadInfo struct {
-	Task string
-	File FileInfo
-}
 
 func NewUser(email string, password string, db gorm.DB) (user User, err error) {
 	hash, err := hashPassword(password)
@@ -77,6 +27,24 @@ func NewUser(email string, password string, db gorm.DB) (user User, err error) {
 		return user, query.Error
 	}
 	return
+}
+
+func NewClient(user User, db gorm.DB) (client Client, err error) {
+	// calculate key if we need a key?
+	client = Client{
+		User_id: user.id,
+	}
+	io.W
+}
+
+func NewClientKey() (key string) {
+	h := sha1.New()
+	// rand.Seed(time.Now().Unix())
+	// rand.P
+	// io.WriteString(h, rand.Float64().String())
+	io.WriteString(w, s)
+	thing := h.Sum(nil)
+	return string(thing)
 }
 
 func ValidateUserPassword(email, password string, db gorm.DB) (user User, err error) {
@@ -100,7 +68,7 @@ func hashPassword(password string) (hash string, err error) {
 	return string(byteHash), err
 }
 
-func ConvertJsonStringToMetaStruct(jsonMeta string) (metadata Meta, err error) {
+func ConvertJsonStringToMetaStruct(jsonMeta string, client Client) (metadata Meta, err error) {
 	data := []byte(jsonMeta)
 	var unmarshalledUploadInfo UploadInfo
 	err = json.Unmarshal(data, &unmarshalledUploadInfo)
@@ -109,7 +77,7 @@ func ConvertJsonStringToMetaStruct(jsonMeta string) (metadata Meta, err error) {
 		return metadata, err
 	}
 	return Meta{
-		1,
+		client.Id,
 		unmarshalledUploadInfo.Task,
 		unmarshalledUploadInfo.File.Name,
 		unmarshalledUploadInfo.File.Hash,
@@ -140,7 +108,11 @@ func ConvertMetaStructToJsonString(metaStruct Meta) (metaJson string, err error)
 	return
 }
 
-func ConvertMetaStructToFileStruct(metaStruct Meta) (fileStruct File, err error) {
+func ConvertMetaStructToFileStruct(metaStruct Meta, db gorm.DB) (fileStruct File, err error) {
+	var clientid int
+	if metaStruct.Client_id != 0 {
+
+	}
 	return File{
 		metaStruct.Client_id, //WRONG
 		metaStruct.Name,
@@ -188,7 +160,7 @@ func RemoveRedundancyFromMetadata(metadata []Meta) (simplifiedMetadata []Meta) {
 		}
 		opposingMapKey := opposingTask + meta.Path + meta.Hash
 		value, exists := metaMap[opposingMapKey]
-		if exists == true {
+		if exists == true && value > 0 {
 			metaMap[opposingMapKey] = value - 1
 		} else {
 			simplifiedMetadata = append(simplifiedMetadata, meta)
@@ -198,5 +170,30 @@ func RemoveRedundancyFromMetadata(metadata []Meta) (simplifiedMetadata []Meta) {
 }
 
 func ComputeFilesFromMetadata(metadata []Meta) (filedata []File) {
+	simplifiedMetadata := RemoveRedundancyFromMetadata(metadata)
+	for _, value := range metadata {
+		filedata = append(filedata, convertMetaStructToFileStruct(value))
+	}
 	return
+}
+
+func ApplyMetadataToFilesTable(metadata []Meta, user User, db gorm.DB) (err error) {
+	for _, meta := range metadata {
+		var file File
+		if meta.Task == "delete" {
+			query := db.Where("path = ?", meta.Path).First(&file)
+			if query.Error != nil {
+				// error
+			}
+			if file.Hash != meta.Hash {
+				fmt.Println("uh oh")
+				// this should never happen.
+				// What's up with your filesystem?
+			}
+			db.Delete(&file)
+		} else if meta.Task == "upload" {
+			file, err = ConvertMetaStructToFileStruct(meta)
+			db.Create(&file)
+		}
+	}
 }
