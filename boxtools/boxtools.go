@@ -76,6 +76,22 @@ type UploadInfo struct {
 	File FileInfo
 }
 
+// Needed funcs:
+
+// func GetJournalEntriesSinceJID(jid int64) (entries []JournalEntries, err error)
+// this will probably call RemoveRedundancyFromMetadata once it gets all entries
+// This makes me wonder if JournalEntry should also track user, because if we are
+// tracking multiple users in the same journalentries table, we have to be able to only
+// pull out only entries relevant to a specific user
+
+// func TellClientToUploadFile this actually would just be part of the commit handler
+
+// func CreateMetasFromJournalEntries
+
+// func UpdateCurrentFilesystemState(User, []JournalEntries) <- not needed?
+// func ComputeFileSystemState <- not needed?
+// func GetFilesystemState <- not needed?
+
 func ConvertMetaStructToFileStruct(metaStruct Meta) (fileStruct File, err error) {
 	return File{
 		Name:      metaStruct.Name,

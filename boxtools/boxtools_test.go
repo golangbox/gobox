@@ -2,6 +2,7 @@ package boxtools
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -11,8 +12,9 @@ import (
 )
 
 const (
-	email    = "max.t.mcdonnell@gmail.com"
-	password = "password"
+	email     = "max.t.mcdonnell@gmail.com"
+	password  = "password"
+	hexdigits = slice{"a", "b"}
 )
 
 var db gorm.DB
@@ -29,6 +31,35 @@ func init() {
 	if err != nil {
 		fmt.Println(err)
 	}
+}
+
+// needed funcs:
+
+// TestGetJournalEntriesSinceJID
+// TestTellClientToUploadFile
+// TestCreateMetasFromJounralEntries
+// TestCreatingManyFiles
+// TestCreatingManyJournalEntries
+
+// CreateRandomMeta
+// CreateRandomJid
+
+// We can create random client behavior by mocking out the http endpoint
+// create a pool of users and their clients and then just run
+
+// func CreateRandomHash(length int64) (string) {
+
+// }
+
+// func CreateRandomMeta(clientID int64) (Meta, err error) {
+// 	return Meta{}
+// }
+
+func TestRandomFunctions(t *testing.T) {
+	time := time.Now().Unix()
+	rand.Seed(time)
+	fmt.Println(hexdigits[0])
+
 }
 
 func TestDBFindFileReturnsErrorWhenNotFound(t *testing.T) {
