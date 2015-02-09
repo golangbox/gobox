@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/golangbox/gobox/model"
 	"io"
 	"io/ioutil"
 	"log"
@@ -16,12 +15,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/golangbox/gobox/model"
 )
 
 const (
 	goBoxDirectory     = "."
 	goBoxDataDirectory = ".GoBox"
-	serverEndpoint     = "http://localhost:4243"
+	serverEndpoint     = "http://requestb.in/1mv9fa41"
 	// serverEndpoint           = "http://www.google.com"
 	filesystemCheckFrequency = 5
 )
@@ -122,6 +123,9 @@ func uploadMetadata(uploadinfo model.FileAction) (resp *http.Response, err error
 	}
 	resp, err = http.Post(serverEndpoint+"/meta", "application/json", bytes.NewBuffer(jsonBytes))
 	fmt.Println(resp)
+	if err != nil {
+		return resp, err
+	}
 	if uploadinfo.IsCreate == true {
 		var contents []byte
 		contents, err = ioutil.ReadAll(resp.Body)

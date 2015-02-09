@@ -1,7 +1,6 @@
 package model
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -55,15 +54,16 @@ type FileSystemFile struct {
 }
 
 func main() {
-	db, err := gorm.Open("postgres", "dbname=gobox sslmode=disable")
-	if err != nil {
-		fmt.Println(err)
-	}
-	query := db.AutoMigrate(&User{}, &Client{})
-	if query.Error != nil {
-		fmt.Println(query.Error)
-	}
-	fmt.Println(query)
+	// var err error
+	// DB, err = gorm.Open("postgres", "dbname=gobox sslmode=disable")
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
+	// query := DB.AutoMigrate(&User{}, &Client{})
+	// if query.Error != nil {
+	// 	fmt.Println(query.Error)
+	// }
+	// fmt.Println(query)
 
 	// meta, err := convertJsonStringToMetaStruct(testJsonString)
 	// fmt.Println(meta)
