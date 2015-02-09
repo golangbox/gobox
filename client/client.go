@@ -2,12 +2,11 @@ package main
 
 import (
 	"bytes"
-	"container/heap"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"gobox/boxtools"
+	"github.com/golangbox/gobox/model"
 	"io"
 	"io/ioutil"
 	"log"
@@ -27,58 +26,15 @@ const (
 	filesystemCheckFrequency = 5
 )
 
-type uploadHeap []boxtools.UploadInfo
-
-func (h uploadHeap) Len() int           { return len(h) }
-func (h uploadHeap) Less(i, j int) bool { return 0 > h[i].File.Modified.Sub(h[j].File.Modified) }
-func (h uploadHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-
-func (h *uploadHeap) Push(x interface{}) {
-
-	*h = append(*h, x.(boxtools.UploadInfo))
-}
-
-func (h *uploadHeap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	x := old[n-1]
-	*h = old[0 : n-1]
-	return x
-}
-
-var uploadQueue = &uploadHeap{}
-var uploading = false
-
 func main() {
 	fmt.Println("Running GoBox...")
-	// upload_file(name)
-	createGoBoxLocalDirectory()
 
-	heap.Init(uploadQueue)
+	createGoBoxLocalDirectory()
 
 	go monitorFiles()
 
-	// go watchAndProcessUploadQueue()
-
 	select {}
 
-}
-
-func watchAndProcessUploadQueue() {
-	for _ = range time.Tick(filesystemCheckFrequency * time.Second) {
-		// fmt.Println("Checking to see if there's anything to upload.")
-		if !uploading && uploadQueue.Len() > 0 {
-			// fmt.Println("There are things to upload and we're not already uploading. Let's upload!")
-			uploading = true
-			for uploadQueue.Len() > 0 {
-				poppedFileInfo := heap.Pop(uploadQueue).(boxtools.UploadInfo)
-				_ = poppedFileInfo
-				// resp, err := uploadMetadata(poppedFileInfo)
-				// fmt.Println(resp, err)
-			}
-			uploading = false
-		}
-	}
 }
 
 func createGoBoxLocalDirectory() {
@@ -96,8 +52,8 @@ func createGoBoxLocalDirectory() {
 
 func monitorFiles() {
 
-	var newfileInfos = make(map[string]boxtools.FileInfo)
-	var fileInfos = make(map[string]boxtools.FileInfo)
+	var newfileInfos = make(map[string]model.File)
+	var fileInfos = make(map[string]model.File)
 
 	data, err := ioutil.ReadFile(goBoxDataDirectory + "/data")
 	if err != nil {
@@ -107,24 +63,19 @@ func monitorFiles() {
 		err = json.Unmarshal(data, &fileInfos)
 		if err != nil {
 			fmt.Println(err)
-			//asdfsda
 		}
 	}
-
-	// lastFilesystemCheck := make(chan time.Time, 1)
-
 	for _ = range time.Tick(filesystemCheckFrequency * time.Second) {
 		fmt.Println("Checking to see if there are any filesystem changes.")
 		newfileInfos, err = findFilesInDirectory(goBoxDirectory)
 		if err != nil {
 			fmt.Println(err)
 		}
-		err := comparefileInfos(fileInfos, newfileInfos)
+		err := compareFileInfos(fileInfos, newfileInfos)
 		if err != nil {
 			fmt.Println(err)
 			fmt.Println("Error uploading file changes, skipping this upload cycle")
 		} else {
-			//sadfasdfasdfsa
 			err = writefileInfosToLocalFile(newfileInfos)
 			if err != nil {
 				fmt.Println(err)
@@ -136,19 +87,21 @@ func monitorFiles() {
 	}
 }
 
-func writefileInfosToLocalFile(fileInfos map[string]boxtools.FileInfo) error {
+func writefileInfosToLocalFile(fileInfos map[string]model.File) error {
 	jsonBytes, err := json.Marshal(fileInfos)
 	if err != nil {
 		return err
 	}
-	// d1 := []byte("hello\ngo\n")
+
 	err = ioutil.WriteFile(goBoxDataDirectory+"/data", jsonBytes, 0644)
 	return err
 }
 
-func handleFileChange(action string, file boxtools.FileInfo) (err error) {
-	infoToSend := boxtools.UploadInfo{action, file}
-	heap.Push(uploadQueue, infoToSend)
+func handleFileChange(isCreate bool, file model.File) (err error) {
+	infoToSend := model.FileAction{
+		IsCreate: isCreate,
+		File:     file,
+	}
 	resp, err := uploadMetadata(infoToSend)
 	if err != nil {
 		return
@@ -158,21 +111,18 @@ func handleFileChange(action string, file boxtools.FileInfo) (err error) {
 		return
 	}
 
-	// resp, err :=
-	return err
-	// fmt.Println(resp)
-	//asdfsdaf
+	return
 }
 
-func uploadMetadata(uploadinfo boxtools.UploadInfo) (resp *http.Response, err error) {
-	fmt.Println("Uploading metadata: ("+uploadinfo.Task, uploadinfo.File.Name+")")
+func uploadMetadata(uploadinfo model.FileAction) (resp *http.Response, err error) {
+	fmt.Println("Uploading metadata: (" + uploadinfo.File.Name + ")")
 	jsonBytes, err := json.Marshal(uploadinfo)
 	if err != nil {
 		return
 	}
 	resp, err = http.Post(serverEndpoint+"/meta", "application/json", bytes.NewBuffer(jsonBytes))
 	fmt.Println(resp)
-	if uploadinfo.Task == "upload" {
+	if uploadinfo.isCreate {
 		var contents []byte
 		contents, err = ioutil.ReadAll(resp.Body)
 		err := resp.Body.Close()
@@ -195,14 +145,14 @@ func uploadMetadata(uploadinfo boxtools.UploadInfo) (resp *http.Response, err er
 	return
 }
 
-func comparefileInfos(fileInfos map[string]boxtools.FileInfo,
-	newfileInfos map[string]boxtools.FileInfo) (err error) {
+func compareFileInfos(fileInfos map[string]model.File,
+	newfileInfos map[string]model.File) (err error) {
 
 	for key, value := range newfileInfos {
 		// http://stackoverflow.com/questions/2050391/how-to-test-key-existence-in-a-map
 		if _, exists := fileInfos[key]; !exists {
 			fmt.Println("Need to Upload:", value.Name)
-			err = handleFileChange("upload", value)
+			err = handleFileChange(true, value)
 			if err != nil {
 				return err
 			}
@@ -211,13 +161,13 @@ func comparefileInfos(fileInfos map[string]boxtools.FileInfo,
 	for key, value := range fileInfos {
 		if _, exists := newfileInfos[key]; !exists {
 			fmt.Println("Need to delete:", key)
-			err = handleFileChange("delete", value)
+			err = handleFileChange(false, value)
 			if err != nil {
 				return err
 			}
 		}
 	}
-	return err
+	return
 }
 
 // http://matt.aimonetti.net/posts/2013/07/01/golang-multipart-file-upload-example/
@@ -286,9 +236,7 @@ func uploadFile(name string) (*http.Response, error) {
 
 	// http://requestb.in/19w82ne1
 	//"http://10.0.7.205:4242/upload"
-	request, err :=
-		newfileUploadRequest("http://10.0.7.205:4242/upload",
-			extraParams, "FileName", name)
+	request, err := newfileUploadRequest("http://10.0.7.205:4242/upload", extraParams, "FileName", name)
 	if err != nil {
 		return nil, err
 	}
@@ -302,8 +250,7 @@ func mapKeyValue(path string, sha256 string) (key string) {
 }
 
 func findFilesInDirectoryHelper(directory string,
-	fileInfos map[string]boxtools.FileInfo) (outputfileInfos map[string]boxtools.FileInfo,
-	err error) {
+	fileInfos map[string]model.File) (outputfileInfos map[string]model.File, err error) {
 	files, err := ioutil.ReadDir(directory)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to read directory: %s", err)
@@ -324,16 +271,20 @@ func findFilesInDirectoryHelper(directory string,
 				fmt.Println(err)
 			}
 
-			fileInfos[mapKeyValue(path, sha256)] = boxtools.FileInfo{name,
-				sha256, f.Size(), path, f.ModTime()}
+			fileInfos[mapKeyValue(path, sha256)] = model.File{
+				Name:     name,
+				Hash:     sha256,
+				Size:     f.Size(),
+				Path:     path,
+				Modified: f.ModTime(),
+			}
 		}
 	}
 
 	return fileInfos, err
 }
 
-func findFilesInDirectory(directory string) (outputfileInfos map[string]boxtools.FileInfo,
-	err error) {
-	var emptyfileInfos = make(map[string]boxtools.FileInfo)
+func findFilesInDirectory(directory string) (outputfileInfos map[string]model.File, err error) {
+	emptyfileInfos := make(map[string]models.File)
 	return findFilesInDirectoryHelper(directory, emptyfileInfos)
 }
