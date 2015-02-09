@@ -21,7 +21,7 @@ type User struct {
 
 type Client struct {
 	Id         int64
-	User_id    int64
+	UserId     int64
 	SessionKey string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
@@ -30,18 +30,19 @@ type Client struct {
 
 type FileAction struct {
 	Id        int64
-	Client_id int64
+	ClientId  int64
 	IsCreate  bool
-	File_id   string
 	CreatedAt time.Time
+	File      File
 }
 
 type File struct {
 	Id        int64
-	User_id   int64
+	UserId    int64
 	Name      string
 	Hash      string
 	Size      int64
+	Modified  time.Time
 	Path      string `sql:"type:text;"`
 	CreatedAt time.Time
 }
