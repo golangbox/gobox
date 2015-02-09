@@ -25,19 +25,39 @@ type fileInfo struct {
 	Modified time.Time
 }
 
-func writeLocalMeta(fileMeta []byte) {
-	f, err := os.OpenFile("localMeta.gob",
-		os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		panic(err)
-	}
+// func writeLocalMeta(fileMeta []byte) {
+// 	f, err := os.OpenFile("localMeta.gob",
+// 		os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-	defer f.Close()
+// 	defer f.Close()
 
-	if _, err = f.WriteString(string(fileMeta) + "\n"); err != nil {
-		panic(err)
-	}
-}
+// 	if _, err = f.WriteString(string(fileMeta) + "\n"); err != nil {
+// 		panic(err)
+// 	}
+// }
+
+// The high level view goes like this:
+
+// client detects change, sends an http request on the /meta endpoint as a post
+
+// we can call the Task "commit" or whatever.
+
+// server must check to see if the hash already exists for that user in the "File" db table
+// so that check is in the form of db.Where("user=? AND hash=?", user, hash).First(&file) (in pseudo-form)
+
+// If so, write the metadata to the Journal in the form of Task_ID | File_ID
+
+// if not, tell the client that it needs to upload to file with a json object
+
+// the client uploads the file to the server (how will this be accomplished? https? sftp?) <- needs to be able to be cancelled
+// in case the file is changed on the client while this process is ongoing (once the file has been uploaded to the server,
+// everything is good)
+
+// then the client attempts a second commit after successful upload
+// when the server has the hash of the file, the server then adds an entry to the "journal" table
 
 func evalAction(contents []byte) {
 	var uploadData uploadInfo
