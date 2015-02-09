@@ -122,18 +122,18 @@ func uploadMetadata(uploadinfo model.FileAction) (resp *http.Response, err error
 	}
 	resp, err = http.Post(serverEndpoint+"/meta", "application/json", bytes.NewBuffer(jsonBytes))
 	fmt.Println(resp)
-	if uploadinfo.isCreate {
+	if uploadinfo.IsCreate == true {
 		var contents []byte
 		contents, err = ioutil.ReadAll(resp.Body)
 		err := resp.Body.Close()
 		if err != nil {
-			return
+			return resp, err
 		}
 		fmt.Println(string(contents))
 		if string(contents) == "true" {
 			resp, err = uploadFile(uploadinfo.File.Path)
 			if err != nil {
-				return
+				return resp, err
 			}
 		} else {
 			fmt.Println("no need for upload")
@@ -285,6 +285,6 @@ func findFilesInDirectoryHelper(directory string,
 }
 
 func findFilesInDirectory(directory string) (outputfileInfos map[string]model.File, err error) {
-	emptyfileInfos := make(map[string]models.File)
+	emptyfileInfos := make(map[string]model.File)
 	return findFilesInDirectoryHelper(directory, emptyfileInfos)
 }
