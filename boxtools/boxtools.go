@@ -53,7 +53,12 @@ func NewUser(email string, password string) (user model.User, err error) {
 func NewClient(user model.User) (client model.Client, err error) {
 	// calculate key if we need a key?
 	client = model.Client{
-		UserId: user.Id,
+		UserId:     user.Id,
+		SessionKey: NewClientKey(),
+	}
+	query := model.DB.Create(&client)
+	if query.Error != nil {
+		return client, query.Error
 	}
 	return
 }
@@ -69,10 +74,10 @@ func GenerateRandomSha256() (s string, err error) {
 
 func NewClientKey() (key string) {
 	h := sha1.New()
-	// io.WriteString(h, rand.Float64().String())
 	io.WriteString(h, time.Now().String())
 	thing := h.Sum(nil)
-	return string(thing)
+	key = hex.EncodeToString(thing)
+	return
 }
 
 func ValidateUserPassword(email, password string) (user model.User, err error) {
@@ -163,31 +168,30 @@ func RemoveRedundancyFromFileActions(fileActions []model.FileAction) (simplified
 	return
 }
 
-// func ComputeFilesFromMetadata(metadata []Meta) (filedata []File) {
-// 	simplifiedMetadata := RemoveRedundancyFromMetadata(metadata)
-// 	for _, value := range metadata {
-// 		filedata = append(filedata, convertMetaStructToFileStruct(value))
-// 	}
-// 	return
-// }
+func ComputeFilesFromFileActions(fileActions []model.FileAction) (files []model.File) {
+	simplifiedFileActions := RemoveRedundancyFromFileActions(fileActions)
+	for _, value := range simplifiedFileActions {
+		files = append(files, value.File)
+	}
+	return
+}
 
-// func ApplyMetadataToFilesTable(metadata []Meta, user User, db gorm.DB) (err error) {
-// 	for _, meta := range metadata {
-// 		var file File
-// 		if meta.Task == "delete" {
-// 			query := db.Where("path = ?", meta.Path).First(&file)
-// 			if query.Error != nil {
-// 				// error
-// 			}
-// 			if file.Hash != meta.Hash {
-// 				fmt.Println("uh oh")
-// 				// this should never happen.
-// 				// What's up with your filesystem?
-// 			}
-// 			db.Delete(&file)
-// 		} else if meta.Task == "upload" {
-// 			file, err = ConvertMetaStructToFileStruct(meta)
-// 			db.Create(&file)
-// 		}
-// 	}
-// }
+func ApplyFileActionsToFilesTable(fileActions []model.FileAction, user model.User) (err error) {
+	for _, fileAction := range fileActions {
+		if fileAction.IsCreate == true {
+			// what if the path is the same?
+			model.DB.Create(&fileAction.File)
+		} else {
+			var file model.File
+			query := model.DB.Where("path = ?", fileAction.File.Path).First(&file)
+			if query.Error != nil {
+				// uh oh
+			}
+			if file.Hash != fileAction.File.Hash {
+				// uh oh
+			}
+			model.DB.Delete(&file)
+		}
+	}
+	return
+}
