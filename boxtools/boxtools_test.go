@@ -50,6 +50,19 @@ func TestUserCreation(t *testing.T) {
 func TestClientCreation(t *testing.T) {
 	var user model.User
 	model.DB.Where("email = ?", email).Find(&user)
+
+	client, err := NewClient(user)
+
+	if err != nil {
+		t.Error(err)
+	}
+	user = model.User{} //nil user
+
+	//testing relation
+	model.DB.Model(&client).Related(&user)
+	if user.Email != email {
+		t.Fail()
+	}
 }
 
 func TestPasswordValidation(t *testing.T) {
