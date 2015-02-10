@@ -35,6 +35,7 @@ type FileAction struct {
 	IsCreate  bool
 	CreatedAt time.Time
 	File      File
+	FileId    int64
 }
 
 type File struct {
@@ -49,10 +50,10 @@ type File struct {
 }
 
 type FileSystemFile struct {
-	Id      int64
-	User_id int64
-	File_id int64
-	Path    string `sql:"type:text;"`
+	Id     int64
+	UserId int64
+	FileId int64
+	Path   string `sql:"type:text;"`
 }
 
 func main() {
