@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/golangbox/gobox/model"
@@ -33,6 +34,89 @@ func init() {
 
 }
 
+func RandomString(n int) string {
+	s := ""
+	for i := 0; i < n; i++ {
+		s += string('a' + rand.Intn(26))
+	}
+	return s
+}
+
+func GenerateFilePathFromRoot(root string) string {
+	depth := 3
+	s := root
+	for i := 0; i < depth; i++ {
+
+		s += string(filepath.Separator)
+		s += RandomString(rand.Intn(10) + 1)
+	}
+	return s
+}
+
+func GenerateRandomFile(user_id int) (file model.File, err error) {
+	path := GenerateFilePathFromRoot("/path")
+	basename := filepath.Base(path)
+	h, err := GenerateRandomSha256()
+	if err != nil {
+		return file, err
+	}
+	return model.File{
+		UserId:    int64(user_id),
+		Name:      basename,
+		Hash:      h,
+		Size:      rand.Int63(),
+		Modified:  time.Now(),
+		Path:      path,
+		CreatedAt: time.Now(),
+	}, err
+
+}
+
+func GenerateRandomFileAction(client_id int, user_id int, isCreate bool) (fileAction model.FileAction, err error) {
+	file, err := GenerateRandomFile(user_id)
+	if err != nil {
+		return fileAction, err
+	}
+	return model.FileAction{
+		ClientId:  int64(client_id),
+		IsCreate:  isCreate,
+		CreatedAt: time.Now(),
+		File:      file,
+	}, err
+}
+
+func GenerateSliceOfRandomFileActions(user_id int, clients int, actions int) (fileActions []model.FileAction, err error) {
+	fileActions = make([]model.FileAction, actions)
+	for i := 0; i < int(actions); i++ {
+		isAction := rand.Intn(2) == 1
+		action, err := GenerateRandomFileAction(rand.Intn(clients)+1, user_id, isAction)
+		if err != nil {
+			return fileActions, err
+		}
+		fileActions[i] = action
+	}
+	return fileActions, err
+}
+
+func GenerateNoisyAndNonNoisyFileActions(user_id int, clients int, totalNonNoisyActions int, createPairs int) (nonNoisyActions []model.FileAction,
+	noisyActions []model.FileAction, err error) {
+	numNoisyActions := totalNonNoisyActions + createPairs
+	nonNoisyActions, err = GenerateSliceOfRandomFileActions(user_id, clients, totalNonNoisyActions)
+	if err != nil {
+		return
+	}
+	noisyActions = make([]model.FileAction, numNoisyActions)
+	copy(noisyActions, nonNoisyActions)
+	offset := len(nonNoisyActions)
+	for i := 0; i < createPairs; i++ {
+		new := nonNoisyActions[i]
+		new.IsCreate = !new.IsCreate
+		noisyActions[i+offset] = new
+	}
+	return
+
+}
+
 func NewUser(email string, password string) (user model.User, err error) {
 	hash, err := hashPassword(password)
 	if err != nil {
@@ -46,7 +130,7 @@ func NewUser(email string, password string) (user model.User, err error) {
 	if query.Error != nil {
 		return user, query.Error
 	}
-	client, err := NewClient(user, "Server", true)
+	_, err = NewClient(user, "Server", true)
 	if err != nil {
 		return
 	}
@@ -177,12 +261,13 @@ func ComputeFilesFromFileActions(fileActions []model.FileAction) (files []model.
 	return
 }
 
-func WriteFileActionsToDatabase(fileActions []mode.FileAction) (err error) {
+func WriteFileActionsToDatabase(fileActions []model.FileAction) (err error) {
 	for _, fileAction := range fileActions {
 		model.DB.Create(&fileAction)
 		// need to look up in the file database and see if there's matching "File's"
 		// to reference
 	}
+	return
 }
 
 func ApplyFileActionsToFilesTable(fileActions []model.FileAction, user model.User) (err error) {
