@@ -1,17 +1,38 @@
 package boxtools
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
-	"time"
-
 	"github.com/golangbox/gobox/model"
+	"io"
+	"math/rand"
+	"os"
+	"time"
 
 	"crypto/sha1"
 
 	"code.google.com/p/go.crypto/bcrypt"
 )
+
+var salt []byte
+
+func init() {
+	f, err := os.Open("/dev/random")
+	if err != nil {
+		panic("Unable to open /dev/random")
+	}
+	salt = make([]byte, 8)
+	n, err := f.Read(salt)
+	if n != 8 || err != nil {
+		panic("Couldn't read from dev/random")
+	}
+	f.Close()
+
+	rand.Seed(time.Now().Unix())
+
+}
 
 func NewUser(email string, password string) (user model.User, err error) {
 	hash, err := hashPassword(password)
@@ -35,6 +56,15 @@ func NewClient(user model.User) (client model.Client, err error) {
 		UserId: user.Id,
 	}
 	return
+}
+
+func GenerateRandomSha256() (s string, err error) {
+	h := sha256.New()
+	h.Write(salt)
+	io.WriteString(h, time.Now().String())
+	bytes := h.Sum(nil)
+	s = hex.EncodeToString(bytes)
+	return s, err
 }
 
 func NewClientKey() (key string) {
