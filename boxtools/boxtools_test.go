@@ -172,7 +172,6 @@ func TestRemoveRedundancy(t *testing.T) {
 		t.Log("Could not generate file actions successfully")
 		t.FailNow()
 	}
-	t.Log("Blocking before remove redundancy\n")
 	result := RemoveRedundancyFromFileActions(noisy)
 	if 0 != len(result) {
 		t.Log("Result should be empty")
