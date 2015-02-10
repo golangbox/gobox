@@ -5,13 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/golangbox/gobox/model"
 	"io"
 	"math/rand"
 	"os"
 	"time"
 
-	"crypto/sha1"
+	"github.com/golangbox/gobox/model"
 
 	"code.google.com/p/go.crypto/bcrypt"
 )
@@ -47,14 +46,24 @@ func NewUser(email string, password string) (user model.User, err error) {
 	if query.Error != nil {
 		return user, query.Error
 	}
+	client, err := NewClient(user, "Server", true)
+	if err != nil {
+		return
+	}
 	return
 }
 
-func NewClient(user model.User) (client model.Client, err error) {
+func NewClient(user model.User, name string, isServer bool) (client model.Client, err error) {
 	// calculate key if we need a key?
+	newKey, err := GenerateRandomSha256()
+	if err != nil {
+		return
+	}
 	client = model.Client{
 		UserId:     user.Id,
-		SessionKey: NewClientKey(),
+		SessionKey: newKey,
+		IsServer:   isServer,
+		Name:       name,
 	}
 	query := model.DB.Create(&client)
 	if query.Error != nil {
@@ -70,14 +79,6 @@ func GenerateRandomSha256() (s string, err error) {
 	bytes := h.Sum(nil)
 	s = hex.EncodeToString(bytes)
 	return s, err
-}
-
-func NewClientKey() (key string) {
-	h := sha1.New()
-	io.WriteString(h, time.Now().String())
-	thing := h.Sum(nil)
-	key = hex.EncodeToString(thing)
-	return
 }
 
 func ValidateUserPassword(email, password string) (user model.User, err error) {
@@ -176,7 +177,18 @@ func ComputeFilesFromFileActions(fileActions []model.FileAction) (files []model.
 	return
 }
 
+func WriteFileActionsToDatabase(fileActions []mode.FileAction) (err error) {
+	for _, fileAction := range fileActions {
+		model.DB.Create(&fileAction)
+		// need to look up in the file database and see if there's matching "File's"
+		// to reference
+	}
+}
+
 func ApplyFileActionsToFilesTable(fileActions []model.FileAction, user model.User) (err error) {
+	// this is all wrong,
+	// you're looking up the file in the file database
+	// hmmm
 	for _, fileAction := range fileActions {
 		if fileAction.IsCreate == true {
 			// what if the path is the same?

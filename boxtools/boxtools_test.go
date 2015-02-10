@@ -54,7 +54,7 @@ func TestClientCreation(t *testing.T) {
 	var user model.User
 	model.DB.Where("email = ?", email).Find(&user)
 
-	client, err := NewClient(user)
+	client, err := NewClient(user, "test", false)
 
 	if err != nil {
 		t.Error(err)

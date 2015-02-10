@@ -22,6 +22,8 @@ type Client struct {
 	Id         int64
 	UserId     int64
 	SessionKey string
+	Name       string
+	IsServer   bool
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 	DeletedAt  time.Time
