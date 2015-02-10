@@ -125,7 +125,9 @@ func main() {
 	}
 	rw, err := NewRecursiveWatcher(dir)
 	if err != nil {
+		log.Println(err.Error())
 		log.Fatal("Couldn't start a recursive watcher")
+
 	}
 	rw.Run(false)
 	go func() {
