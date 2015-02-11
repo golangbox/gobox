@@ -2,6 +2,8 @@ package api
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/golangbox/gobox/boxtools"
 	"github.com/golangbox/gobox/model"
+	"github.com/golangbox/gobox/s3"
 	"github.com/jinzhu/gorm"
 )
 
@@ -36,6 +39,51 @@ func init() {
 	}
 
 	go ServeServerRoutes("8000")
+}
+
+func TestClientsFileActionsHandler(t *testing.T) {
+	_, _ = boxtools.NewClient(user, "test", false)
+	fileActions, _ := boxtools.GenerateSliceOfRandomFileActions(1, 1, 10)
+	for _, value := range fileActions {
+		model.DB.Create(&value)
+	}
+	resp, _ := http.PostForm(
+		"http://localhost:8000/clients/",
+		url.Values{"sessionKey": {client.SessionKey}},
+	)
+	contents, _ := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fail()
+	}
+	var incomingFileActions []model.FileAction
+	json.Unmarshal(contents, &incomingFileActions)
+	if len(incomingFileActions) != 10 {
+		t.Fail()
+	}
+}
+
+func TestUploadHandler(t *testing.T) {
+	file := []byte("These are the file contents")
+	resp, _ := http.Post(
+		"http://localhost:8000/upload/?sessionKey="+client.SessionKey,
+		"",
+		bytes.NewBuffer(file),
+	)
+
+	h := sha256.New()
+	h.Write(file)
+	byteString := h.Sum(nil)
+	sha256String := hex.EncodeToString(byteString)
+
+	url, _ := s3.GenerateSignedUrl(sha256String)
+
+	resp, _ = http.Get(url)
+
+	contents, _ := ioutil.ReadAll(resp.Body)
+
+	if string(contents) != string(file) {
+		t.Fail()
+	}
 }
 
 func TestApiCallWithWrongAndNoAuth(t *testing.T) {
@@ -98,10 +146,10 @@ func TestFileDownloadHandler(t *testing.T) {
 		t.Error(err)
 	}
 	contents, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println(string(contents))
 	if resp.StatusCode != 200 {
-		fmt.Println(resp.StatusCode)
 		t.Fail()
 	}
+	url := string(contents)
+	_ = url
 	//not sure how we check to see if the url is valid
 }

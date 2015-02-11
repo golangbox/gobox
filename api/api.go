@@ -23,21 +23,40 @@ func ServeServerRoutes(port string) {
 	// public
 	r.HandleFunc("/", IndexHandler)
 	r.HandleFunc("/login/", SignUpHandler).Methods("POST")
-	r.HandleFunc("/login/", LoginHandler).Methods("POST")
+	r.HandleFunc("/sign-up/", LoginHandler).Methods("POST")
 
 	// require client authentication
-	r.HandleFunc("/file-actions/", FileActionsHandler).Methods("POST")
-	r.HandleFunc("/upload/", UploadHandler).Methods("POST")
-	r.HandleFunc("/download/", FileDownloadHandler).Methods("POST")
-	r.HandleFunc("/clients/", ClientsFileActionsHandler).Methods("POST")
+	r.HandleFunc("/file-actions/", sessionValidate(FileActionsHandler)).Methods("POST")
+	r.HandleFunc("/upload/", sessionValidate(UploadHandler)).Methods("POST")
+	r.HandleFunc("/download/", sessionValidate(FileDownloadHandler)).Methods("POST")
+	r.HandleFunc("/clients/", sessionValidate(ClientsFileActionsHandler)).Methods("POST")
 
 	// static files? (css, js, etc...)
 	// r.PathPrefix("/").Handler(http.FileServer(http.Dir("./public/")))
 
 	http.Handle("/", r)
 
+	// http://golang.org/doc/articles/wiki/
+
 	fmt.Println("Serving api on port :" + port)
 	http.ListenAndServe(":"+port, nil)
+}
+
+func sessionValidate(fn func(http.ResponseWriter, *http.Request, model.Client)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		client, err := verifyAndReturnClient(r)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		// m := validPath.FindStringSubmatch(r.URL.Path)
+		// if m == nil {
+		//     http.NotFound(w, r)
+		//     return
+		// }
+		fn(w, r, client)
+	}
 }
 
 func verifyAndReturnClient(req *http.Request) (client model.Client, err error) {
@@ -58,13 +77,9 @@ func verifyAndReturnClient(req *http.Request) (client model.Client, err error) {
 	return
 }
 
-func FileActionsHandler(w http.ResponseWriter, req *http.Request) {
-	client, err := verifyAndReturnClient(req)
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(err.Error()))
-		return
-	}
+func FileActionsHandler(w http.ResponseWriter, req *http.Request,
+	client model.Client) {
+
 	contents, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -124,13 +139,9 @@ func FileActionsHandler(w http.ResponseWriter, req *http.Request) {
 
 	// req.Body
 }
-func UploadHandler(w http.ResponseWriter, req *http.Request) {
-	_, err := verifyAndReturnClient(req)
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(err.Error()))
-		return
-	}
+func UploadHandler(w http.ResponseWriter, req *http.Request,
+	client model.Client) {
+
 	contents, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -167,13 +178,8 @@ func UploadHandler(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func FileDownloadHandler(w http.ResponseWriter, req *http.Request) {
-	client, err := verifyAndReturnClient(req)
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(err.Error()))
-		return
-	}
+func FileDownloadHandler(w http.ResponseWriter, req *http.Request,
+	client model.Client) {
 
 	var user model.User
 	query := model.DB.Model(&client).Related(&user)
@@ -217,14 +223,57 @@ func FileDownloadHandler(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte(url))
 }
 
-func ClientsFileActionsHandler(w http.ResponseWriter, req *http.Request) {
-	client, err := verifyAndReturnClient(req)
+func ClientsFileActionsHandler(w http.ResponseWriter, req *http.Request,
+	client model.Client) {
+
+	var user model.User
+	query := model.DB.Model(&client).Related(&user)
+	if query.Error != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(query.Error.Error()))
+		return
+	}
+
+	var clients []model.Client
+	query = model.DB.Model(&user).Not("Id = ?", client.Id).Related(&clients, "clients")
+	if query.Error != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(query.Error.Error()))
+		return
+	}
+
+	var clientIds []int64
+	for _, value := range clients {
+		clientIds = append(clientIds, value.Id)
+	}
+
+	var fileActions []model.FileAction
+	query = model.DB.Where("client_id in (?)", clientIds).
+		Where("Id > ?", client.LastSynchedFileActionId).
+		Find(&fileActions)
+
+	if query.Error != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(query.Error.Error()))
+		return
+	}
+
+	responseJsonBytes, err := json.Marshal(fileActions)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
+		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
 	}
-	_ = client
+	w.Write(responseJsonBytes)
+
+	var highestId int64
+	for _, value := range fileActions {
+		if value.Id > highestId {
+			highestId = value.Id
+		}
+	}
+	client.LastSynchedFileActionId = highestId
+	model.DB.Save(&client)
 
 }
 

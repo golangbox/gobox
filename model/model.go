@@ -19,14 +19,15 @@ type User struct {
 }
 
 type Client struct {
-	Id         int64
-	UserId     int64
-	SessionKey string
-	Name       string
-	IsServer   bool
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	DeletedAt  time.Time
+	Id                      int64
+	UserId                  int64
+	SessionKey              string
+	Name                    string
+	IsServer                bool
+	LastSynchedFileActionId int64
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+	DeletedAt               time.Time
 }
 
 type FileAction struct {
