@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Mon Feb 09 14:36:00 2015 Marin Alcaraz
-** Last update Thu Feb 12 14:16:31 2015 Marin Alcaraz
+** Last update Thu Feb 12 18:21:58 2015 Marin Alcaraz
  */
 
 package UDPush
@@ -154,17 +154,17 @@ func handleConnection(conn net.Conn) error {
 //InitUDPush 'constructs' the UDP notification engine
 //The e on the reciever stands for event
 func (e *Pusher) InitUDPush() error {
-	connectionString := fmt.Sprintf("%s:%s", e.ServerID, e.BindedTo)
+	connectionString := fmt.Sprintf("%s:%d", e.ServerID, e.BindedTo)
 	ln, err := net.Listen("tcp", connectionString)
 	if err != nil {
-		return fmt.Errorf("Error at initUDPush: %s", err)
+		return fmt.Errorf("[!] Error at InitUDPush: %s", err)
 	}
 	for {
 		conn, err := ln.Accept()
 		defer conn.Close()
 		fmt.Println("Host connected: ", ln.Addr())
 		if err != nil {
-			return fmt.Errorf("Error at initUDPush: %s", err)
+			return fmt.Errorf("[!] Error at InitUDPush: %s", err)
 		}
 		go handleConnection(conn)
 	}
