@@ -19,14 +19,15 @@ type User struct {
 }
 
 type Client struct {
-	Id         int64
-	UserId     int64
-	SessionKey string
-	Name       string
-	IsServer   bool
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	DeletedAt  time.Time
+	Id                      int64
+	UserId                  int64
+	SessionKey              string
+	Name                    string
+	IsServer                bool
+	LastSynchedFileActionId int64
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+	DeletedAt               time.Time
 }
 
 type FileAction struct {
@@ -35,6 +36,7 @@ type FileAction struct {
 	IsCreate  bool
 	CreatedAt time.Time
 	File      File
+	FileId    int64
 }
 
 type File struct {
@@ -49,10 +51,10 @@ type File struct {
 }
 
 type FileSystemFile struct {
-	Id      int64
-	User_id int64
-	File_id int64
-	Path    string `sql:"type:text;"`
+	Id     int64
+	UserId int64
+	FileId int64
+	Path   string `sql:"type:text;"`
 }
 
 func main() {

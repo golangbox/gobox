@@ -2,10 +2,13 @@ package boxtools
 
 import (
 	"fmt"
+	"testing"
+
+	"testing"
+
 	"github.com/golangbox/gobox/model"
 	"github.com/jinzhu/gorm"
 	_ "github.com/lib/pq"
-	"testing"
 )
 
 const (

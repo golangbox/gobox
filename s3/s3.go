@@ -20,6 +20,8 @@ func init() {
 }
 
 func TestKeyExistence(hash string) (exists bool, err error) {
+	// this is expensive, both in terms of time and $
+	// maybe store the s3 values in a db?
 	exists, err = bucket.Exists(hash)
 	return exists, err
 }

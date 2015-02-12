@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/golangbox/gobox/model"
+	"github.com/jinzhu/gorm"
 
 	"code.google.com/p/go.crypto/bcrypt"
 )
@@ -130,7 +131,8 @@ func NewUser(email string, password string) (user model.User, err error) {
 	if query.Error != nil {
 		return user, query.Error
 	}
-	_, err = NewClient(user, "Server", true)
+	client, err := NewClient(user, "Server", true)
+	_ = client
 	if err != nil {
 		return
 	}
@@ -261,34 +263,66 @@ func ComputeFilesFromFileActions(fileActions []model.FileAction) (files []model.
 	return
 }
 
-func WriteFileActionsToDatabase(fileActions []model.FileAction) (err error) {
+func WriteFileActionsToDatabase(fileActions []model.FileAction, client model.Client) (err error) {
+	var user model.User
+	query := model.DB.Model(&client).Related(&user)
+	if query.Error != nil {
+		err = query.Error
+		return
+	}
 	for _, fileAction := range fileActions {
-		model.DB.Create(&fileAction)
-		// need to look up in the file database and see if there's matching "File's"
-		// to reference
+		file, err := FindFile(fileAction.File.Hash, fileAction.File.Path, user)
+		if err != nil {
+			return err
+		}
+		if file.Id != 0 {
+			// if the file exists, assign an id
+			// otherwise GORM automatically creates
+			// the file, so make sure to clear the File
+			// struct
+			fileAction.FileId = file.Id
+			fileAction.File = model.File{}
+		}
+		query = model.DB.Create(&fileAction)
+		if query.Error != nil {
+			return query.Error
+		}
 	}
 	return
 }
 
-func ApplyFileActionsToFilesTable(fileActions []model.FileAction, user model.User) (err error) {
-	// this is all wrong,
-	// you're looking up the file in the file database
-	// hmmm
-	for _, fileAction := range fileActions {
-		if fileAction.IsCreate == true {
-			// what if the path is the same?
-			model.DB.Create(&fileAction.File)
+func FindFile(hash string, path string, user model.User) (file model.File, err error) {
+	query := model.DB.Where(&model.File{
+		UserId: user.Id,
+		Path:   path,
+		Hash:   hash,
+	}).First(&file)
+	if query.Error != nil {
+		if query.Error != gorm.RecordNotFound {
+			return file, query.Error
 		} else {
-			var file model.File
-			query := model.DB.Where("path = ?", fileAction.File.Path).First(&file)
-			if query.Error != nil {
-				// uh oh
-			}
-			if file.Hash != fileAction.File.Hash {
-				// uh oh
-			}
-			model.DB.Delete(&file)
+			return
 		}
 	}
+	return //this should never happen
+}
+
+func ApplyFileActionsToFilesTable(fileActions []model.FileAction, user model.User) (err error) {
+	// for _, fileAction := range fileActions {
+	// 	if fileAction.IsCreate == true {
+	// 		// what if the path is the same?
+	// 		model.DB.Create(&fileAction.File)
+	// 	} else {
+	// 		var file model.File
+	// 		query := model.DB.Where("path = ?", fileAction.File.Path).First(&file)
+	// 		if query.Error != nil {
+	// 			// uh oh
+	// 		}
+	// 		if file.Hash != fileAction.File.Hash {
+	// 			// uh oh
+	// 		}
+	// 		model.DB.Delete(&file)
+	// 	}
+	// }
 	return
 }
