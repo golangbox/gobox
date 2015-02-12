@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/golangbox/gobox/boxtools"
-	"github.com/golangbox/gobox/model"
-	"github.com/golangbox/gobox/s3"
+	"github.com/golangbox/gobox/server/model"
+	"github.com/golangbox/gobox/server/s3"
 	"github.com/golangbox/gobox/structs"
 	"github.com/jinzhu/gorm"
 )
@@ -72,7 +72,11 @@ func TestUploadHandler(t *testing.T) {
 		"",
 		bytes.NewBuffer(file),
 	)
-
+	contents, _ := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		err := fmt.Errorf(string(contents))
+		t.Error(err)
+	}
 	h := sha256.New()
 	h.Write(file)
 	byteString := h.Sum(nil)
@@ -82,7 +86,7 @@ func TestUploadHandler(t *testing.T) {
 
 	resp, _ = http.Get(url)
 
-	contents, _ := ioutil.ReadAll(resp.Body)
+	contents, _ = ioutil.ReadAll(resp.Body)
 
 	if string(contents) != string(file) {
 		t.Fail()

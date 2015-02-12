@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/golangbox/gobox/model"
+	"github.com/golangbox/gobox/server/model"
 	"github.com/golangbox/gobox/structs"
 	"github.com/jinzhu/gorm"
 
