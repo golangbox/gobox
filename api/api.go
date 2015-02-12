@@ -11,13 +11,13 @@ import (
 	"github.com/golangbox/gobox/boxtools"
 	"github.com/golangbox/gobox/model"
 	"github.com/golangbox/gobox/s3"
+	"github.com/golangbox/gobox/structs"
 	"github.com/jinzhu/gorm"
 	"github.com/sqs/mux"
 )
 
 func ServeServerRoutes(port string) {
 	r := mux.NewRouter()
-	// "http://thing.com/login" redirects to "http://thing.com/login/"
 	r.StrictSlash(true)
 
 	// public
@@ -36,13 +36,27 @@ func ServeServerRoutes(port string) {
 
 	http.Handle("/", r)
 
-	// http://golang.org/doc/articles/wiki/
-
 	fmt.Println("Serving api on port :" + port)
 	http.ListenAndServe(":"+port, nil)
 }
 
-func sessionValidate(fn func(http.ResponseWriter, *http.Request, model.Client)) http.HandlerFunc {
+type httpError struct {
+	err            error
+	code           int
+	responseWriter http.ResponseWriter
+}
+
+func (h *httpError) check() bool {
+	if h.err != nil {
+		h.responseWriter.WriteHeader(h.code)
+		h.responseWriter.Write([]byte(h.err.Error()))
+		return true
+	} else {
+		return false
+	}
+}
+
+func sessionValidate(fn func(http.ResponseWriter, *http.Request, structs.Client)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		client, err := verifyAndReturnClient(r)
 		if err != nil {
@@ -50,16 +64,11 @@ func sessionValidate(fn func(http.ResponseWriter, *http.Request, model.Client)) 
 			w.Write([]byte(err.Error()))
 			return
 		}
-		// m := validPath.FindStringSubmatch(r.URL.Path)
-		// if m == nil {
-		//     http.NotFound(w, r)
-		//     return
-		// }
 		fn(w, r, client)
 	}
 }
 
-func verifyAndReturnClient(req *http.Request) (client model.Client, err error) {
+func verifyAndReturnClient(req *http.Request) (client structs.Client, err error) {
 	sessionKey := req.FormValue("sessionKey")
 	if sessionKey == "" {
 		err = fmt.Errorf("No session key with request")
@@ -78,20 +87,20 @@ func verifyAndReturnClient(req *http.Request) (client model.Client, err error) {
 }
 
 func FileActionsHandler(w http.ResponseWriter, req *http.Request,
-	client model.Client) {
+	client structs.Client) {
+	httpError := httpError{responseWriter: w}
 
-	contents, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+	var contents []byte
+	contents, httpError.err = ioutil.ReadAll(req.Body)
+	httpError.code = http.StatusInternalServerError
+	if httpError.check() {
 		return
 	}
 
-	var fileActions []model.FileAction
-	err = json.Unmarshal(contents, &fileActions)
-	if err != nil {
-		w.WriteHeader(http.StatusNotAcceptable)
-		w.Write([]byte(err.Error()))
+	var fileActions []structs.FileAction
+	httpError.err = json.Unmarshal(contents, &fileActions)
+	httpError.code = http.StatusNotAcceptable
+	if httpError.check() {
 		return
 	}
 
@@ -99,25 +108,23 @@ func FileActionsHandler(w http.ResponseWriter, req *http.Request,
 		value.ClientId = client.Id
 	}
 
-	err = boxtools.WriteFileActionsToDatabase(fileActions, client)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+	httpError.err = boxtools.WriteFileActionsToDatabase(fileActions, client)
+	httpError.code = http.StatusInternalServerError
+	if httpError.check() {
 		return
 	}
 
 	var hashesThatNeedToBeUploaded []string
-
 	hashMap := make(map[string]bool)
 	// write to a map to remove any duplicate hashes
 	for _, value := range fileActions {
 		hashMap[value.File.Hash] = true
 	}
 	for key, _ := range hashMap {
-		exists, err := s3.TestKeyExistence(key)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
+		var exists bool
+		exists, httpError.err = s3.TestKeyExistence(key)
+		httpError.code = http.StatusInternalServerError
+		if httpError.check() {
 			return
 		}
 		if exists == false {
@@ -128,50 +135,45 @@ func FileActionsHandler(w http.ResponseWriter, req *http.Request,
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
-	jsonBytes, err := json.Marshal(hashesThatNeedToBeUploaded)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+	var jsonBytes []byte
+	jsonBytes, httpError.err = json.Marshal(hashesThatNeedToBeUploaded)
+	httpError.code = http.StatusInternalServerError
+	if httpError.check() {
 		return
 	}
+	w.WriteHeader(http.StatusOK)
 	w.Write(jsonBytes)
-
-	// req.Body
 }
 func UploadHandler(w http.ResponseWriter, req *http.Request,
-	client model.Client) {
+	client structs.Client) {
+	httpError := httpError{responseWriter: w}
 
-	contents, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+	var contents []byte
+	contents, httpError.err = ioutil.ReadAll(req.Body)
+	httpError.code = http.StatusUnauthorized
+	if httpError.check() {
 		return
 	}
+
 	h := sha256.New()
-	_, err = h.Write(contents)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+	_, httpError.err = h.Write(contents)
+	httpError.code = http.StatusInternalServerError
+	if httpError.check() {
 		return
 	}
 	byteString := h.Sum(nil)
-
 	sha256String := hex.EncodeToString(byteString)
 
 	// we have the hash, so we might as well check if it
 	// exists again before we upload
-	exists, err := s3.TestKeyExistence(sha256String)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+	var exists bool
+	exists, httpError.err = s3.TestKeyExistence(sha256String)
+	if httpError.check() {
 		return
 	}
 	if exists == false {
-		err = s3.UploadFile(sha256String, contents)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
+		httpError.err = s3.UploadFile(sha256String, contents)
+		if httpError.check() {
 			return
 		}
 	}
@@ -179,26 +181,26 @@ func UploadHandler(w http.ResponseWriter, req *http.Request,
 }
 
 func FileDownloadHandler(w http.ResponseWriter, req *http.Request,
-	client model.Client) {
+	client structs.Client) {
+	httpError := httpError{responseWriter: w}
+	httpError.code = http.StatusInternalServerError
 
-	var user model.User
+	var user structs.User
 	query := model.DB.Model(&client).Related(&user)
-	if query.Error != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(query.Error.Error()))
+	httpError.err = query.Error
+	if httpError.check() {
 		return
 	}
 
 	fileHash := req.FormValue("fileHash")
-	fmt.Println(fileHash)
 	if fileHash == "" {
 		w.WriteHeader(http.StatusNotAcceptable)
 		return
 	}
 
-	var file model.File
+	var file structs.File
 	query = model.DB.Where(
-		&model.File{
+		&structs.File{
 			UserId: user.Id,
 			Hash:   fileHash,
 		},
@@ -212,33 +214,43 @@ func FileDownloadHandler(w http.ResponseWriter, req *http.Request,
 		}
 		return
 	}
-	url, err := s3.GenerateSignedUrl(fileHash)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+
+	var exists bool
+	exists, httpError.err = s3.TestKeyExistence(fileHash)
+	if httpError.check() {
 		return
 	}
 
+	if exists != true {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	var url string
+	url, httpError.err = s3.GenerateSignedUrl(fileHash)
+	if httpError.check() {
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(url))
 }
 
 func ClientsFileActionsHandler(w http.ResponseWriter, req *http.Request,
-	client model.Client) {
+	client structs.Client) {
+	httpError := httpError{responseWriter: w}
+	httpError.code = http.StatusInternalServerError
 
-	var user model.User
+	var user structs.User
 	query := model.DB.Model(&client).Related(&user)
-	if query.Error != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(query.Error.Error()))
+	httpError.err = query.Error
+	if httpError.check() {
 		return
 	}
 
-	var clients []model.Client
+	var clients []structs.Client
 	query = model.DB.Model(&user).Not("Id = ?", client.Id).Related(&clients, "clients")
-	if query.Error != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(query.Error.Error()))
+	httpError.err = query.Error
+	if httpError.check() {
 		return
 	}
 
@@ -247,21 +259,18 @@ func ClientsFileActionsHandler(w http.ResponseWriter, req *http.Request,
 		clientIds = append(clientIds, value.Id)
 	}
 
-	var fileActions []model.FileAction
+	var fileActions []structs.FileAction
 	query = model.DB.Where("client_id in (?)", clientIds).
 		Where("Id > ?", client.LastSynchedFileActionId).
 		Find(&fileActions)
-
-	if query.Error != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(query.Error.Error()))
+	httpError.err = query.Error
+	if httpError.check() {
 		return
 	}
 
-	responseJsonBytes, err := json.Marshal(fileActions)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+	var responseJsonBytes []byte
+	responseJsonBytes, httpError.err = json.Marshal(fileActions)
+	if httpError.check() {
 		return
 	}
 	w.Write(responseJsonBytes)

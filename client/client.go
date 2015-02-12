@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/golangbox/gobox/client/structs"
 	"github.com/golangbox/gobox/client/watcher"
+	"github.com/golangbox/gobox/structs"
 )
 
 // PROBLEMS: No way to tell if a remove event was dir or a file because it can't be os.Stat'ed
@@ -83,5 +83,5 @@ func run(path string) {
 }
 
 func main() {
-	run("../test")
+	run(".")
 }

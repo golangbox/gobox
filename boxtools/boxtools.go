@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/golangbox/gobox/model"
+	"github.com/golangbox/gobox/structs"
 	"github.com/jinzhu/gorm"
 
 	"code.google.com/p/go.crypto/bcrypt"
@@ -54,14 +55,14 @@ func GenerateFilePathFromRoot(root string) string {
 	return s
 }
 
-func GenerateRandomFile(user_id int) (file model.File, err error) {
+func GenerateRandomFile(user_id int) (file structs.File, err error) {
 	path := GenerateFilePathFromRoot("/path")
 	basename := filepath.Base(path)
 	h, err := GenerateRandomSha256()
 	if err != nil {
 		return file, err
 	}
-	return model.File{
+	return structs.File{
 		UserId:    int64(user_id),
 		Name:      basename,
 		Hash:      h,
@@ -73,12 +74,12 @@ func GenerateRandomFile(user_id int) (file model.File, err error) {
 
 }
 
-func GenerateRandomFileAction(client_id int, user_id int, isCreate bool) (fileAction model.FileAction, err error) {
+func GenerateRandomFileAction(client_id int, user_id int, isCreate bool) (fileAction structs.FileAction, err error) {
 	file, err := GenerateRandomFile(user_id)
 	if err != nil {
 		return fileAction, err
 	}
-	return model.FileAction{
+	return structs.FileAction{
 		ClientId:  int64(client_id),
 		IsCreate:  isCreate,
 		CreatedAt: time.Now(),
@@ -86,8 +87,8 @@ func GenerateRandomFileAction(client_id int, user_id int, isCreate bool) (fileAc
 	}, err
 }
 
-func GenerateSliceOfRandomFileActions(user_id int, clients int, actions int) (fileActions []model.FileAction, err error) {
-	fileActions = make([]model.FileAction, actions)
+func GenerateSliceOfRandomFileActions(user_id int, clients int, actions int) (fileActions []structs.FileAction, err error) {
+	fileActions = make([]structs.FileAction, actions)
 	for i := 0; i < int(actions); i++ {
 		isAction := rand.Intn(2) == 1
 		action, err := GenerateRandomFileAction(rand.Intn(clients)+1, user_id, isAction)
@@ -99,14 +100,14 @@ func GenerateSliceOfRandomFileActions(user_id int, clients int, actions int) (fi
 	return fileActions, err
 }
 
-func GenerateNoisyAndNonNoisyFileActions(user_id int, clients int, totalNonNoisyActions int, createPairs int) (nonNoisyActions []model.FileAction,
-	noisyActions []model.FileAction, err error) {
+func GenerateNoisyAndNonNoisyFileActions(user_id int, clients int, totalNonNoisyActions int, createPairs int) (nonNoisyActions []structs.FileAction,
+	noisyActions []structs.FileAction, err error) {
 	numNoisyActions := totalNonNoisyActions + createPairs
 	nonNoisyActions, err = GenerateSliceOfRandomFileActions(user_id, clients, totalNonNoisyActions)
 	if err != nil {
 		return
 	}
-	noisyActions = make([]model.FileAction, numNoisyActions)
+	noisyActions = make([]structs.FileAction, numNoisyActions)
 	copy(noisyActions, nonNoisyActions)
 	offset := len(nonNoisyActions)
 	for i := 0; i < createPairs; i++ {
@@ -118,12 +119,12 @@ func GenerateNoisyAndNonNoisyFileActions(user_id int, clients int, totalNonNoisy
 
 }
 
-func NewUser(email string, password string) (user model.User, err error) {
+func NewUser(email string, password string) (user structs.User, err error) {
 	hash, err := hashPassword(password)
 	if err != nil {
 		return
 	}
-	user = model.User{
+	user = structs.User{
 		Email:          email,
 		HashedPassword: hash,
 	}
@@ -139,13 +140,13 @@ func NewUser(email string, password string) (user model.User, err error) {
 	return
 }
 
-func NewClient(user model.User, name string, isServer bool) (client model.Client, err error) {
+func NewClient(user structs.User, name string, isServer bool) (client structs.Client, err error) {
 	// calculate key if we need a key?
 	newKey, err := GenerateRandomSha256()
 	if err != nil {
 		return
 	}
-	client = model.Client{
+	client = structs.Client{
 		UserId:     user.Id,
 		SessionKey: newKey,
 		IsServer:   isServer,
@@ -167,7 +168,7 @@ func GenerateRandomSha256() (s string, err error) {
 	return s, err
 }
 
-func ValidateUserPassword(email, password string) (user model.User, err error) {
+func ValidateUserPassword(email, password string) (user structs.User, err error) {
 	model.DB.Where("email = ?", email).First(&user)
 	bytePassword := []byte(password)
 	byteHash := []byte(user.HashedPassword)
@@ -188,19 +189,19 @@ func hashPassword(password string) (hash string, err error) {
 	return string(byteHash), err
 }
 
-func ConvertJsonStringToFileActionsStruct(jsonFileAction string, client model.Client) (fileAction model.FileAction, err error) {
+func ConvertJsonStringToFileActionsStruct(jsonFileAction string, client structs.Client) (fileAction structs.FileAction, err error) {
 	// {"Id":0,"ClientId":0,"IsCreate":true,"CreatedAt":"0001-01-01T00:00:00Z","File":{"Id":0,"UserId":0,"Name":"client.go","Hash":"f953d35b6d8067bf2bd9c46017c554b73aa28a549fac06ba747d673b2da5bfe0","Size":6622,"Modified":"2015-02-09T14:39:22-05:00","Path":"./client.go","CreatedAt":"0001-01-01T00:00:00Z"}}
 	data := []byte(jsonFileAction)
-	var unmarshalledFileAction model.FileAction
+	var unmarshalledFileAction structs.FileAction
 	err = json.Unmarshal(data, &unmarshalledFileAction)
 	if err != nil {
-		err = fmt.Errorf("Error unmarshaling json to model.FileAction: %s", err)
+		err = fmt.Errorf("Error unmarshaling json to structs.FileAction: %s", err)
 		return
 	}
 	return
 }
 
-func ConvertFileActionStructToJsonString(fileActionStruct model.FileAction) (fileActionJson string, err error) {
+func ConvertFileActionStructToJsonString(fileActionStruct structs.FileAction) (fileActionJson string, err error) {
 	jsonBytes, err := json.Marshal(fileActionStruct)
 	if err != nil {
 		return
@@ -209,7 +210,7 @@ func ConvertFileActionStructToJsonString(fileActionStruct model.FileAction) (fil
 	return
 }
 
-func RemoveRedundancyFromFileActions(fileActions []model.FileAction) (simplifiedFileActions []model.FileAction) {
+func RemoveRedundancyFromFileActions(fileActions []structs.FileAction) (simplifiedFileActions []structs.FileAction) {
 	// removing redundancy
 	// if a file is created, and then deleted remove
 
@@ -255,7 +256,7 @@ func RemoveRedundancyFromFileActions(fileActions []model.FileAction) (simplified
 	return
 }
 
-func ComputeFilesFromFileActions(fileActions []model.FileAction) (files []model.File) {
+func ComputeFilesFromFileActions(fileActions []structs.FileAction) (files []structs.File) {
 	simplifiedFileActions := RemoveRedundancyFromFileActions(fileActions)
 	for _, value := range simplifiedFileActions {
 		files = append(files, value.File)
@@ -263,8 +264,8 @@ func ComputeFilesFromFileActions(fileActions []model.FileAction) (files []model.
 	return
 }
 
-func WriteFileActionsToDatabase(fileActions []model.FileAction, client model.Client) (err error) {
-	var user model.User
+func WriteFileActionsToDatabase(fileActions []structs.FileAction, client structs.Client) (err error) {
+	var user structs.User
 	query := model.DB.Model(&client).Related(&user)
 	if query.Error != nil {
 		err = query.Error
@@ -281,7 +282,7 @@ func WriteFileActionsToDatabase(fileActions []model.FileAction, client model.Cli
 			// the file, so make sure to clear the File
 			// struct
 			fileAction.FileId = file.Id
-			fileAction.File = model.File{}
+			fileAction.File = structs.File{}
 		}
 		query = model.DB.Create(&fileAction)
 		if query.Error != nil {
@@ -291,8 +292,8 @@ func WriteFileActionsToDatabase(fileActions []model.FileAction, client model.Cli
 	return
 }
 
-func FindFile(hash string, path string, user model.User) (file model.File, err error) {
-	query := model.DB.Where(&model.File{
+func FindFile(hash string, path string, user structs.User) (file structs.File, err error) {
+	query := model.DB.Where(&structs.File{
 		UserId: user.Id,
 		Path:   path,
 		Hash:   hash,
@@ -307,13 +308,13 @@ func FindFile(hash string, path string, user model.User) (file model.File, err e
 	return //this should never happen
 }
 
-func ApplyFileActionsToFilesTable(fileActions []model.FileAction, user model.User) (err error) {
+func ApplyFileActionsToFilesTable(fileActions []structs.FileAction, user structs.User) (err error) {
 	// for _, fileAction := range fileActions {
 	// 	if fileAction.IsCreate == true {
 	// 		// what if the path is the same?
 	// 		model.DB.Create(&fileAction.File)
 	// 	} else {
-	// 		var file model.File
+	// 		var file structs.File
 	// 		query := model.DB.Where("path = ?", fileAction.File.Path).First(&file)
 	// 		if query.Error != nil {
 	// 			// uh oh

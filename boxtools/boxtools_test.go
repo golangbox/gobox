@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/golangbox/gobox/model"
+	"github.com/golangbox/gobox/structs"
 	"github.com/jinzhu/gorm"
 	_ "github.com/lib/pq"
 )
@@ -16,20 +17,20 @@ const (
 	password = "password"
 )
 
-var user model.User
-var client model.Client
+var user structs.User
+var client structs.Client
 
 func init() {
 	var err error
 
 	model.DB, err = gorm.Open("postgres", "dbname=goboxtest sslmode=disable")
 
-	model.DB.DropTableIfExists(&model.User{})
-	model.DB.DropTableIfExists(&model.Client{})
-	model.DB.DropTableIfExists(&model.FileAction{})
-	model.DB.DropTableIfExists(&model.File{})
-	model.DB.DropTableIfExists(&model.FileSystemFile{})
-	model.DB.AutoMigrate(&model.User{}, &model.Client{}, &model.FileAction{}, &model.File{}, &model.FileSystemFile{})
+	model.DB.DropTableIfExists(&structs.User{})
+	model.DB.DropTableIfExists(&structs.Client{})
+	model.DB.DropTableIfExists(&structs.FileAction{})
+	model.DB.DropTableIfExists(&structs.File{})
+	model.DB.DropTableIfExists(&structs.FileSystemFile{})
+	model.DB.AutoMigrate(&structs.User{}, &structs.Client{}, &structs.FileAction{}, &structs.File{}, &structs.FileSystemFile{})
 
 	if err != nil {
 		fmt.Println(err)
@@ -51,7 +52,7 @@ func TestUserCreation(t *testing.T) {
 }
 
 func TestClientCreation(t *testing.T) {
-	var user model.User
+	var user structs.User
 	model.DB.Where("email = ?", email).Find(&user)
 
 	client, err := NewClient(user, "test", false)
@@ -59,7 +60,7 @@ func TestClientCreation(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	user = model.User{} //nil user
+	user = structs.User{} //nil user
 
 	//testing relation
 	model.DB.Model(&client).Related(&user)
@@ -77,7 +78,7 @@ func TestPasswordValidation(t *testing.T) {
 		t.Fail()
 	}
 	// clean up created user
-	model.DB.Where("email = ?", email).Delete(model.User{})
+	model.DB.Where("email = ?", email).Delete(structs.User{})
 }
 
 func TestJsonMetaConversion(t *testing.T) {

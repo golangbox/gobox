@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/golangbox/gobox/model"
+	"github.com/golangbox/gobox/structs"
 )
 
 const (
@@ -53,8 +53,8 @@ func createGoBoxLocalDirectory() {
 
 func monitorFiles() {
 
-	var newfileInfos = make(map[string]model.File)
-	var fileInfos = make(map[string]model.File)
+	var newfileInfos = make(map[string]structs.File)
+	var fileInfos = make(map[string]structs.File)
 
 	data, err := ioutil.ReadFile(goBoxDataDirectory + "/data")
 	if err != nil {
@@ -88,7 +88,7 @@ func monitorFiles() {
 	}
 }
 
-func writefileInfosToLocalFile(fileInfos map[string]model.File) error {
+func writefileInfosToLocalFile(fileInfos map[string]structs.File) error {
 	jsonBytes, err := json.Marshal(fileInfos)
 	if err != nil {
 		return err
@@ -98,8 +98,8 @@ func writefileInfosToLocalFile(fileInfos map[string]model.File) error {
 	return err
 }
 
-func handleFileChange(isCreate bool, file model.File) (err error) {
-	infoToSend := model.FileAction{
+func handleFileChange(isCreate bool, file structs.File) (err error) {
+	infoToSend := structs.FileAction{
 		IsCreate: isCreate,
 		File:     file,
 	}
@@ -115,7 +115,7 @@ func handleFileChange(isCreate bool, file model.File) (err error) {
 	return
 }
 
-func uploadMetadata(uploadinfo model.FileAction) (resp *http.Response, err error) {
+func uploadMetadata(uploadinfo structs.FileAction) (resp *http.Response, err error) {
 	fmt.Println("Uploading metadata: (" + uploadinfo.File.Name + ")")
 	jsonBytes, err := json.Marshal(uploadinfo)
 	if err != nil {
@@ -149,8 +149,8 @@ func uploadMetadata(uploadinfo model.FileAction) (resp *http.Response, err error
 	return
 }
 
-func compareFileInfos(fileInfos map[string]model.File,
-	newfileInfos map[string]model.File) (err error) {
+func compareFileInfos(fileInfos map[string]structs.File,
+	newfileInfos map[string]structs.File) (err error) {
 
 	for key, value := range newfileInfos {
 		// http://stackoverflow.com/questions/2050391/how-to-test-key-existence-in-a-map
@@ -254,7 +254,7 @@ func mapKeyValue(path string, sha256 string) (key string) {
 }
 
 func findFilesInDirectoryHelper(directory string,
-	fileInfos map[string]model.File) (outputfileInfos map[string]model.File, err error) {
+	fileInfos map[string]structs.File) (outputfileInfos map[string]structs.File, err error) {
 	files, err := ioutil.ReadDir(directory)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to read directory: %s", err)
@@ -275,7 +275,7 @@ func findFilesInDirectoryHelper(directory string,
 				fmt.Println(err)
 			}
 
-			fileInfos[mapKeyValue(path, sha256)] = model.File{
+			fileInfos[mapKeyValue(path, sha256)] = structs.File{
 				Name:     name,
 				Hash:     sha256,
 				Size:     f.Size(),
@@ -288,7 +288,7 @@ func findFilesInDirectoryHelper(directory string,
 	return fileInfos, err
 }
 
-func findFilesInDirectory(directory string) (outputfileInfos map[string]model.File, err error) {
-	emptyfileInfos := make(map[string]model.File)
+func findFilesInDirectory(directory string) (outputfileInfos map[string]structs.File, err error) {
+	emptyfileInfos := make(map[string]structs.File)
 	return findFilesInDirectoryHelper(directory, emptyfileInfos)
 }

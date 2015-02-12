@@ -8,8 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-fsnotify/fsnotify"
-	"github.com/golangbox/gobox/client/structs"
-	"github.com/golangbox/gobox/model"
+	"github.com/golangbox/gobox/structs"
 )
 
 type RecursiveWatcher struct {
@@ -73,7 +72,7 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 						}
 
 						watcher.Files <- structs.StateChange{
-							File: model.File{
+							File: structs.File{
 								Path: event.Name,
 							},
 							IsCreate: true,
@@ -87,7 +86,7 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 						// DebugMessage("Detected file modification %s", event.Name)
 					}
 					watcher.Files <- structs.StateChange{
-						File: model.File{
+						File: structs.File{
 							Path: event.Name,
 						},
 						IsCreate: true,
@@ -95,7 +94,7 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 				}
 				if event.Op&fsnotify.Remove == fsnotify.Remove {
 					watcher.Files <- structs.StateChange{
-						File: model.File{
+						File: structs.File{
 							Path: event.Name,
 						},
 						IsCreate: false,
