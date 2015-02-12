@@ -1,29 +1,12 @@
 package main
 
 import (
-	// "bytes"
-	// "crypto/sha256"
-	// "encoding/hex"
-	// "encoding/json"
-	// "errors"
 	"fmt"
-	// "io"
-	// "io/ioutil"
 	"log"
-	// "mime/multipart"
-	// "net/http"
-	// "os"
-	"path/filepath"
-	// "strconv"
-	// "strings"
 	"time"
 
-	// "github.com/go-fsnotify/fsnotify"
-	"github.com/codegangsta/cli"
 	"github.com/golangbox/gobox/client/structs"
 	"github.com/golangbox/gobox/client/watcher"
-	// "github.com/golangbox/gobox/model"
-
 )
 
 // PROBLEMS: No way to tell if a remove event was dir or a file because it can't be os.Stat'ed
@@ -50,7 +33,6 @@ func startWatcher(dir string) (out chan structs.StateChange, err error) {
 	go func() {
 		for {
 			fileEv := <-rw.Files
-			fmt.Println(fileEv)
 			fmt.Println(fileEv)
 
 		}
@@ -91,17 +73,15 @@ func stephen(stateChanges <-chan structs.StateChange) {
 	//
 }
 
-func run(args []string) {
-	watcherActions := startWatcher(args[1])
+func run(path string) {
+	watcherActions, _ := startWatcher(path)
 	fmt.Println(watcherActions)
+	for {
+		time.Sleep(1000)
+	}
 
 }
 
 func main() {
-	app := cli.NewApp()
-	app.name = "Gobox"
-	app.Usage = "gobox gobox_folder_filepath"
-	app.Action = func(c *cli.Context) {
-		run(c.Args())
-	}
+	run("../test")
 }

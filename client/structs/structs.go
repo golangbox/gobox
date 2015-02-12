@@ -12,8 +12,3 @@ type StateChange struct {
 	IsCreate bool
 	IsLocal  bool
 }
-
-type ActionsOnPath struct {
-	local  StateChange
-	remote StateChange
-}
