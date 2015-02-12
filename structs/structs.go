@@ -3,12 +3,13 @@ package structs
 import "time"
 
 type StateChange struct {
-	File     File
-	begin    <-chan bool
-	quit     <-chan bool
-	done     <-chan bool
-	IsCreate bool
-	IsLocal  bool
+	File         File
+	begin        <-chan bool
+	quit         <-chan bool
+	done         <-chan bool
+	IsCreate     bool
+	IsLocal      bool
+	PreviousHash string
 }
 
 type User struct {

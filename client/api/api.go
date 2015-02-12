@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"strconv"
 
 	"github.com/golangbox/gobox/structs"
 )
@@ -14,26 +16,26 @@ const (
 	apiEndpoint = "http://localhost:8000/"
 )
 
-type client struct {
+type Api struct {
 	sessionKey string
 }
 
-func New(sessionKey string) (c client) {
+func New(sessionKey string) (c Api) {
 	c.sessionKey = sessionKey
 	return
 }
 
-func (c *client) apiRequest(endpoint string, body []byte,
+func (c *Api) apiRequest(endpoint string, body []byte,
 	fileType string) (*http.Response, error) {
 	return http.Post(
 		apiEndpoint+endpoint+"/?sessionKey="+c.sessionKey,
 		"application/json",
-		bytes.NewBuffer(jsonBytes),
+		bytes.NewBuffer(body),
 	)
 }
 
-func (c *client) SendFileActionsToServer(
-	fileActions []structs.FileActions) (
+func (c *Api) SendFileActionsToServer(
+	fileActions []structs.FileAction) (
 	filesToUpload []string, err error) {
 
 	jsonBytes, err := json.Marshal(fileActions)
@@ -56,8 +58,8 @@ func (c *client) SendFileActionsToServer(
 		return
 	}
 
-	if resp.StatusCode != htt.StatusOK {
-		err = fmt.Errorf(contents)
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf(string(contents))
 		return
 	}
 
@@ -68,8 +70,8 @@ func (c *client) SendFileActionsToServer(
 	return
 }
 
-func (c *client) UploadFileToServer(fileBody []byte) (err error) {
-	resp, err = c.apiRequest(
+func (c *Api) UploadFileToServer(fileBody []byte) (err error) {
+	resp, err := c.apiRequest(
 		"upload",
 		fileBody,
 		"",
@@ -77,12 +79,63 @@ func (c *client) UploadFileToServer(fileBody []byte) (err error) {
 	if err != nil {
 		return
 	}
-	if resp.StatusCode != htt.StatusOK {
+	if resp.StatusCode != http.StatusOK {
 		contents, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return
+			return err
 		}
+		err = fmt.Errorf(string(contents))
+		return err
+	}
+	return
+}
+
+func (c *Api) DownloadFileFromServer(
+	hash string) (s3_url string, err error) {
+	resp, err := http.PostForm(
+		apiEndpoint+"/download/",
+		url.Values{
+			"sessionKey": {c.sessionKey},
+			"fileHash":   {hash},
+		},
+	)
+	if err != nil {
+		return
+	}
+	contents, err := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
 		err = fmt.Errorf(string(contents))
 		return
 	}
+	s3_url = string(contents)
+	return
+}
+
+func (c *Api) DownloadClientFileActions(
+	lastId int) (fileActions []structs.FileAction, err error) {
+
+	lastId = 0 // don't have support for this just yet
+	var lastIdString string
+	lastIdString = strconv.Itoa(lastId)
+	resp, err := http.PostForm(
+		apiEndpoint+"/clients/",
+		url.Values{
+			"sessionKey": {c.sessionKey},
+			"lastID":     {lastIdString},
+		},
+	)
+	if err != nil {
+		return
+	}
+	contents, err := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf(string(contents))
+		return
+	}
+
+	err = json.Unmarshal(contents, &fileActions)
+	if err != nil {
+		return
+	}
+	return
 }
