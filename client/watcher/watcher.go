@@ -1,29 +1,20 @@
 package watcher
 
 import (
-	// "bytes"
-	// "crypto/sha256"
-	// "encoding/hex"
-	// "encoding/json"
 	"errors"
-	// "fmt"
-	// "io"
-	// "io/ioutil"
+	"fmt"
 	"log"
-	// "mime/multipart"
-	// "net/http"
 	"os"
 	"path/filepath"
-	// "strconv"
 	"strings"
-	// "time"
 
 	"github.com/go-fsnotify/fsnotify"
+	"github.com/golangbox/gobox/client/structs"
 )
 
 type RecursiveWatcher struct {
 	*fsnotify.Watcher
-	Files   chan string
+	Files   chan structs.StateChange
 	Folders chan string
 }
 
@@ -39,7 +30,7 @@ func NewRecursiveWatcher(path string) (*RecursiveWatcher, error) {
 	}
 	rw := &RecursiveWatcher{Watcher: watcher}
 
-	rw.Files = make(chan string, 10)
+	rw.Files = make(chan structs.StateChange, 10)
 	rw.Folders = make(chan string, len(folders))
 
 	for _, folder := range folders {
@@ -80,7 +71,11 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 						if debug {
 							// DebugMessage("Detected new file %s", event.Name)
 						}
-						watcher.Files <- event.Name // created a file
+
+						watcher.Files <- structs.StateChange{
+							Path:     event.Name,
+							IsCreate: true,
+						}
 					}
 				}
 
@@ -89,10 +84,17 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 					if debug {
 						// DebugMessage("Detected file modification %s", event.Name)
 					}
-					watcher.Files <- event.Name
+					watcher.Files <- structs.StateChange{
+						Path:     event.Name,
+						IsCreate: true,
+					}
 				}
 				if event.Op&fsnotify.Remove == fsnotify.Remove {
-					watcher.Files <- event.Name
+					fmt.Println(event.Op)
+					watcher.Files <- structs.StateChange{
+						Path:     event.Name,
+						IsCreate: false,
+					}
 				}
 
 			case err := <-watcher.Errors:
@@ -127,33 +129,3 @@ func Subfolders(path string) (paths []string) {
 func shouldIgnoreFile(name string) bool {
 	return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
 }
-
-// func main() {
-// 	dir, err := filepath.Abs("/home/jdp/go/src/github.com/golangbox/gobox/test")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	rw, err := NewRecursiveWatcher(dir)
-// 	if err != nil {
-// 		log.Println(err.Error())
-// 		log.Fatal("Couldn't start a recursive watcher")
-
-// 	}
-// 	rw.Run(false)
-// 	go func() {
-// 		for {
-// 			fileEv := <-rw.Files
-// 			fmt.Println(fileEv)
-// 		}
-// 	}()
-// 	go func() {
-// 		for {
-// 			foldEv := <-rw.Folders
-// 			fmt.Println(foldEv)
-// 		}
-// 	}()
-
-// 	for {
-// 		time.Sleep(1000)
-// 	}
-// }
