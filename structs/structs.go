@@ -4,12 +4,18 @@ import "time"
 
 type StateChange struct {
 	File         File
-	begin        <-chan bool
-	quit         <-chan bool
-	done         <-chan bool
 	IsCreate     bool
 	IsLocal      bool
+	Quit         <-chan bool
+	Done         chan<- bool
+	Error        chan<- int
 	PreviousHash string
+}
+
+type ChannelMessages struct {
+	Quit  chan<- bool
+	Done  <-chan bool
+	Error <-chan int
 }
 
 type User struct {
