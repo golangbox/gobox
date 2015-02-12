@@ -9,8 +9,8 @@ import (
 	"net/http"
 
 	"github.com/golangbox/gobox/boxtools"
-	"github.com/golangbox/gobox/model"
-	"github.com/golangbox/gobox/s3"
+	"github.com/golangbox/gobox/server/model"
+	"github.com/golangbox/gobox/server/s3"
 	"github.com/golangbox/gobox/structs"
 	"github.com/jinzhu/gorm"
 	"github.com/sqs/mux"

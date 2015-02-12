@@ -1,6 +1,4 @@
 tmp/
-server
-backup
 localMeta.gob
 
 .*.*.sw*
