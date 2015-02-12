@@ -2,6 +2,8 @@ package api
 
 import (
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"testing"
 
 	"github.com/golangbox/gobox/boxtools"
@@ -39,7 +41,7 @@ func init() {
 }
 
 func TestSendFileActionsToServer(t *testing.T) {
-	fileActions, _ := boxtools.GenerateSliceOfRandomFileActions(1, 1, 10)
+	fileActions, _ := boxtools.GenerateSliceOfRandomFileActions(1, 1, 1)
 
 	var hashesToUpload []string
 	var err error
@@ -47,5 +49,58 @@ func TestSendFileActionsToServer(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println(hashesToUpload)
+
+	if fileActions[0].File.Hash != hashesToUpload[0] {
+		t.Error(fmt.Errorf("Wrong hash returned"))
+	}
+}
+
+func TestDownloadFileFromServer(t *testing.T) {
+	testFile := structs.File{
+		Hash:   "fc45acaffc35a3aa674f7c0d5a03d22350b4f2ff4bf45ccebad077e5af80e512",
+		UserId: user.Id,
+	}
+	model.DB.Create(&testFile)
+
+	url, err := apiClient.DownloadFileFromServer("fc45acaffc35a3aa674f7c0d5a03d22350b4f2ff4bf45ccebad077e5af80e512")
+	if err != nil {
+		t.Error(err)
+	}
+	_ = url
+	// futher tested to confirm functioanlity in
+	// TestUploadFileToServer
+}
+
+func TestUploadFileToServer(t *testing.T) {
+	file := []byte("this is a file")
+	err := apiClient.UploadFileToServer(file)
+	if err != nil {
+		t.Error(err)
+	}
+
+	expectedHash := "fc45acaffc35a3aa674f7c0d5a03d22350b4f2ff4bf45ccebad077e5af80e512"
+	testFile := structs.File{
+		Hash:   expectedHash,
+		UserId: user.Id,
+	}
+	model.DB.Create(&testFile)
+
+	s3_url, err := apiClient.DownloadFileFromServer(
+		expectedHash,
+	)
+	if err != nil {
+		t.Error(err)
+	}
+	resp, err := http.Get(s3_url)
+	if err != nil {
+		t.Error(err)
+	}
+	contents, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if string(contents) != "this is a file" {
+		t.Error(fmt.Errorf("S3 file contents don't match"))
+	}
 }

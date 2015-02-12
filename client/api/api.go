@@ -93,7 +93,7 @@ func (c *Api) UploadFileToServer(fileBody []byte) (err error) {
 func (c *Api) DownloadFileFromServer(
 	hash string) (s3_url string, err error) {
 	resp, err := http.PostForm(
-		apiEndpoint+"/download/",
+		apiEndpoint+"download/",
 		url.Values{
 			"sessionKey": {c.sessionKey},
 			"fileHash":   {hash},
@@ -102,6 +102,7 @@ func (c *Api) DownloadFileFromServer(
 	if err != nil {
 		return
 	}
+
 	contents, err := ioutil.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		err = fmt.Errorf(string(contents))
