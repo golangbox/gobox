@@ -3,18 +3,26 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Mon Feb 09 14:36:00 2015 Marin Alcaraz
-** Last update Wed Feb 11 15:18:04 2015 Marin Alcaraz
+** Last update Thu Feb 12 14:16:31 2015 Marin Alcaraz
  */
 
 package UDPush
 
-import "fmt"
+import (
+	"fmt"
+	"net"
+)
 
 // Constants
 
 // MAX NUMBER PER WATCHER ENGINE
 
 const maxClients = 10
+
+type update struct {
+	status  bool
+	ownerID int
+}
 
 // NotificationEngine interface for the notification system
 // Defines the requirements to create a gobox
@@ -35,8 +43,9 @@ type WatcherEngine interface {
 //Pusher struct that satisfies the NotificationEngine interface
 type Pusher struct {
 	ServerID string
+	BindedTo uint
 	Watchers map[int]*Watcher
-	Status   int
+	Pending  bool
 }
 
 // Watcher Struct that satisfies the WatcherEngine
@@ -55,7 +64,6 @@ type Watcher struct {
 func (e *Pusher) Initialize(id string) {
 	e.ServerID = id
 	e.Watchers = make(map[int]*Watcher, maxClients)
-	e.Status = 0
 }
 
 //Attach Add a new Watcher to the notification slice
@@ -109,4 +117,55 @@ func (e *Pusher) ShowWatchers() {
 // http://tinyurl.com/lhzjvmm
 func (w *Watcher) Update() {
 	w.Action = true
+}
+
+//Network related methods
+
+func getPendingUpdates() update {
+	return update{status: true,
+		ownerID: 1}
+}
+
+//HandleConnection keeps alive the UDP notification service between
+//client and server
+func handleConnection(conn net.Conn) error {
+	for {
+		//Check if there is something to update...
+		//TODO: This function needs pairing
+		out := getPendingUpdates()
+		if out.status {
+			//Write to client
+
+			//Create an slice of bytes to contain the ownerID
+			//Since we can only send []bytes we must to this
+			notification := make([]byte, 1)
+			notification[0] = byte(out.ownerID)
+
+			//Send the notification and check the error
+			_, err := conn.Write(notification)
+			if err != nil {
+				return fmt.Errorf("Error handleConnection: %s", err)
+			}
+		}
+	}
+	return nil
+}
+
+//InitUDPush 'constructs' the UDP notification engine
+//The e on the reciever stands for event
+func (e *Pusher) InitUDPush() error {
+	connectionString := fmt.Sprintf("%s:%s", e.ServerID, e.BindedTo)
+	ln, err := net.Listen("tcp", connectionString)
+	if err != nil {
+		return fmt.Errorf("Error at initUDPush: %s", err)
+	}
+	for {
+		conn, err := ln.Accept()
+		defer conn.Close()
+		fmt.Println("Host connected: ", ln.Addr())
+		if err != nil {
+			return fmt.Errorf("Error at initUDPush: %s", err)
+		}
+		go handleConnection(conn)
+	}
 }
