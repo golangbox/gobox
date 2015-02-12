@@ -51,6 +51,9 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 		for {
 			select {
 			case event := <-watcher.Events:
+				if ext := filepath.Ext(event.Name); ext == ".tmp" {
+					continue
+				}
 				// create a file/directory
 				if event.Op&fsnotify.Create == fsnotify.Create {
 					fi, err := os.Stat(event.Name)
