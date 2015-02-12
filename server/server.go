@@ -4,6 +4,10 @@ import (
 	"fmt"
 
 	"github.com/golangbox/gobox/UDPush"
+	"github.com/golangbox/gobox/server/api"
+	"github.com/golangbox/gobox/server/model"
+	"github.com/golangbox/gobox/structs"
+	"github.com/jinzhu/gorm"
 )
 
 type services struct {
@@ -57,4 +61,17 @@ func main() {
 		fmt.Println(err)
 	}
 
+	model.DB, _ = gorm.Open(
+		"postgres",
+		"dbname=gobox sslmode=disable",
+	)
+	model.DB.AutoMigrate(
+		&structs.User{},
+		&structs.Client{},
+		&structs.FileAction{},
+		&structs.File{},
+		&structs.FileSystemFile{},
+	)
+
+	api.ServeServerRoutes("8000")
 }

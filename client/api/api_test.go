@@ -90,6 +90,7 @@ func TestUploadFileToServer(t *testing.T) {
 	)
 	if err != nil {
 		t.Error(err)
+		t.FailNow()
 	}
 	resp, err := http.Get(s3_url)
 	if err != nil {
