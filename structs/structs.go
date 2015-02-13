@@ -18,6 +18,11 @@ type ChannelMessages struct {
 	Error <-chan int
 }
 
+type FileSystemState struct {
+	FileActionId int64
+	State        map[string]File
+}
+
 type User struct {
 	Id             int64
 	Email          string `sql:"type:text;"`
