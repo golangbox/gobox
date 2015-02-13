@@ -1,94 +1,77 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"os"
-	"time"
+
+	"github.com/golangbox/gobox/UDPush"
+	"github.com/golangbox/gobox/server/api"
+	"github.com/golangbox/gobox/server/model"
+	"github.com/golangbox/gobox/structs"
+	"github.com/jinzhu/gorm"
 )
 
-type uploadInfo struct {
-	Task string
-	File fileInfo
-}
-type fileInfo struct {
-	Name     string
-	Hash     string
-	Size     int64
-	Path     string
-	Modified time.Time
+type services struct {
+	s3     bool
+	api    bool
+	udpush bool
 }
 
-func writeLocalMeta(fileMeta []byte) {
-	f, err := os.OpenFile("localMeta.gob",
-		os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		panic(err)
-	}
-
-	defer f.Close()
-
-	if _, err = f.WriteString(string(fileMeta) + "\n"); err != nil {
-		panic(err)
-	}
+type server struct {
+	services
+	name        string
+	ip          string
+	port        uint
+	clientLimit uint
+	status      func() bool
+	display     func() string
+	pusher      UDPush.Pusher
 }
 
-func evalAction(contents []byte) {
-	var uploadData uploadInfo
-
-	err := json.Unmarshal(contents, &uploadData)
-	fileMeta := uploadData.File
-
-	if err != nil {
-		fmt.Errorf("Error: %s", err)
+func (s *server) checkStatus() bool {
+	if s.services.api == true &&
+		s.services.s3 == true &&
+		s.services.udpush == true {
+		return true
 	}
-
-	switch uploadData.Task {
-	case "upload":
-		fmt.Printf("[*]Uploading %s to S3...", fileMeta.Name)
-	}
-}
-
-func handleMetaConnection(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-
-	case "GET":
-		log.Println("[+] GET REQUEST RECEIVED")
-
-	case "POST":
-		log.Println("[+] POST REQUEST RECEIVED")
-		contents, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			panic("Error")
-		}
-		writeLocalMeta(contents)
-		evalAction(contents)
-
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-
-	}
+	return false
 }
 
 func main() {
-	fmt.Println("[+] Server Initialized on port: 4243")
-	//// Upload endpoint
-	//http.HandleFunc("/upload", uploadHandler)
 
-	//// files endpoint
-	//http.HandleFunc("/files", fileListHandler)
+	//Launch API
+	//api.ServeServerRoutes()
 
-	// meta endpoint
-	http.HandleFunc("/meta", handleMetaConnection)
+	s := server{
+		name:        "Elvis",
+		ip:          "127.0.0.1",
+		port:        4242,
+		clientLimit: 10,
+	}
 
-	//static file handler.
-	http.Handle("/assets/",
-		http.StripPrefix("/assets/",
-			http.FileServer(http.Dir("assets"))))
-	authOnS3()
-	//Listen
-	http.ListenAndServe(":4243", nil)
+	////Launch UDP notification service
+	////Define the Subject (The guy who is goin to hold all the clients)
+
+	s.pusher = UDPush.Pusher{
+		ServerID: s.ip,
+		BindedTo: s.port,
+	}
+
+	err := s.pusher.InitUDPush()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	model.DB, _ = gorm.Open(
+		"postgres",
+		"dbname=gobox sslmode=disable",
+	)
+	model.DB.AutoMigrate(
+		&structs.User{},
+		&structs.Client{},
+		&structs.FileAction{},
+		&structs.File{},
+		&structs.FileSystemFile{},
+	)
+
+	api.ServeServerRoutes("8000")
 }

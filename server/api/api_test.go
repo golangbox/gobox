@@ -119,7 +119,7 @@ func TestApiCallWithWrongAndNoAuth(t *testing.T) {
 }
 
 func TestFileActionsHandler(t *testing.T) {
-	fileActions, _ := boxtools.GenerateSliceOfRandomFileActions(1, 1, 10)
+	fileActions, _ := boxtools.GenerateSliceOfRandomFileActions(1, 1, 2)
 	var bothfileActions []structs.FileAction
 	for _, value := range fileActions {
 		bothfileActions = append(bothfileActions, value)
@@ -132,12 +132,12 @@ func TestFileActionsHandler(t *testing.T) {
 		bytes.NewBuffer(jsonBytes),
 	)
 	contents, _ := ioutil.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Fail()
 	}
 	var responseSlice []string
 	json.Unmarshal(contents, &responseSlice)
-	if len(responseSlice) != 10 {
+	if len(responseSlice) != 2 {
 		t.Fail()
 	}
 }

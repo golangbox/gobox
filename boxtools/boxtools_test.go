@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"testing"
-
-	"github.com/golangbox/gobox/model"
+	"github.com/golangbox/gobox/server/model"
 	"github.com/golangbox/gobox/structs"
 	"github.com/jinzhu/gorm"
 	_ "github.com/lib/pq"
