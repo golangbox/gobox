@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -44,8 +45,7 @@ func RandomString(n int) string {
 	return s
 }
 
-func GenerateFilePathFromRoot(root string) string {
-	depth := 3
+func GenerateFilePathFromRoot(root string, depth int) string {
 	s := root
 	for i := 0; i < depth; i++ {
 
@@ -55,8 +55,81 @@ func GenerateFilePathFromRoot(root string) string {
 	return s
 }
 
+func GenerateRandomBytes(n int) []byte {
+	slc := make([]byte, n)
+	for i := 0; i < n; i++ {
+		slc[i] = 'a' + byte(rand.Intn(26))
+	}
+	return slc
+}
+
+func WriteRandomFileContent(path string) (err error) {
+	bytes := GenerateRandomBytes(rand.Intn(1000))
+	f, err := os.Create(path)
+	if err != nil {
+		return
+	}
+	_, err = f.Write(bytes)
+	return
+}
+
+func sortPair(a int, b int) (less int, more int) {
+	if a < b {
+		return a, b
+	}
+	return b, a
+}
+
+func changeRandomPartOfFile(path string) (err error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	if fi.IsDir() {
+		return errors.New("Cannot alter a dir")
+	}
+	flen := fi.Size()
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	bytes := make([]byte, flen)
+	n, err := f.Read(bytes)
+	if err != nil {
+		return
+	}
+	start, stop := sortPair(rand.Intn(n), rand.Intn(n))
+	for i := start; i < stop; i++ {
+		bytes[i] = (((bytes[i] - 'a') + 1) % 26) + 'a'
+	}
+	_, err = f.Write(bytes)
+	return
+}
+
+func SimulateFilesystemChanges(dir string, inserts int, alters int, deletes int) {
+
+	inserted := make([]string, 0)
+	for i := 0; i < inserts; i++ {
+		path := GenerateFilePathFromRoot(dir, 1)
+		err := WriteRandomFileContent(path)
+		if err == nil {
+			inserted = append(inserted, path)
+		}
+	}
+	fmt.Println(len(inserted))
+	for i := 0; i < alters; i++ {
+		changeRandomPartOfFile(inserted[i])
+	}
+	for i := 0; i < deletes; i++ {
+		err := os.Remove(inserted[i])
+		if err != nil {
+			fmt.Println("Failed to remove a file in simulateFilesystemChanges")
+		}
+	}
+}
+
 func GenerateRandomFile(user_id int) (file structs.File, err error) {
-	path := GenerateFilePathFromRoot("/path")
+	path := GenerateFilePathFromRoot("/path", 3)
 	basename := filepath.Base(path)
 	h, err := GenerateRandomSha256()
 	if err != nil {
