@@ -7,15 +7,15 @@ type StateChange struct {
 	IsCreate     bool
 	IsLocal      bool
 	Quit         <-chan bool
-	Done         chan<- bool
-	Error        chan<- int
+	Done         chan<- interface{}
+	Error        chan<- interface{}
 	PreviousHash string
 }
 
 type ChannelMessages struct {
 	Quit  chan<- bool
-	Done  <-chan bool
-	Error <-chan int
+	Done  <-chan interface{}
+	Error <-chan interface{}
 }
 
 type FileSystemState struct {

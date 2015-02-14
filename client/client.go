@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/golangbox/gobox/client/watcher"
@@ -26,16 +27,13 @@ const (
 )
 
 func startWatcher(dir string) (out chan structs.StateChange, err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
 	rw, err := watcher.NewRecursiveWatcher(dir)
 	if err != nil {
-		log.Println(err.Error())
-		log.Fatal("Couldn't start a recursive watcher")
+		return out, err
 
 	}
 	rw.Run(false)
+	fmt.Println("about to fail")
 	return rw.Files, err
 }
 
@@ -153,6 +151,47 @@ func hasher(change structs.StateChange) {
 	return
 }
 
+type ArbitraryFanIn struct {
+	Chans  []reflect.SelectCase
+	ErrOut <-chan interface{}
+}
+
+// func (s *ArbitraryFanIn) AddChannel(chan
+
+func FanNIn(newChannels <-chan chan interface{}, out chan<- interface{}, removeOnEvent bool) {
+	var ch <-chan interface{}
+	chans := make([]reflect.SelectCase, 0)
+	timeout := time.Tick(1000 * time.Millisecond)
+	chans = append(chans, reflect.SelectCase{
+		Dir:  reflect.SelectRecv,
+		Chan: reflect.ValueOf(timeout),
+	})
+	for {
+		select {
+		case ch = <-newChannels:
+			chans = append(chans, reflect.SelectCase{
+				Dir:  reflect.SelectRecv,
+				Chan: reflect.ValueOf(ch),
+			})
+		default:
+			chosen, value, ok := reflect.Select(chans)
+			if chosen == 0 {
+				fmt.Println("timeout")
+				continue
+			}
+			if removeOnEvent || !ok {
+				lastIndex := len(chans) - 1
+				chans[chosen] = chans[lastIndex]
+				chans = chans[:lastIndex]
+			}
+			if ok {
+				out <- value.Interface()
+			}
+		}
+
+	}
+}
+
 func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 	// spin up a goroutine that will fan in error messages using reflect.select
 	// hand it an error channel, and add this to the main select statement
@@ -161,27 +200,32 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 	if err != nil {
 		panic("Could not properly retrieve fileSystemState")
 	}
-	pendingChanges := make(map[string]structs.ChannelMessages)
-
+	pendingChanges := make(map[string]chan bool)
+	newErrors := make((chan (chan interface{})))
+	newDones := make((chan (chan interface{})))
+	errors := make(chan interface{})
+	dones := make(chan interface{})
+	go FanNIn(newErrors, errors, true)
+	go FanNIn(newDones, dones, true)
 	for {
 		select {
+		case e := <-errors:
+			pth := reflect.ValueOf(e).FieldByName("Path")
+			fmt.Println("Experienced an error with ", pth)
+			// delete(pendingChanges, err
+
 		case change := <-stateChanges:
 			fmt.Println(change)
 			quitChan := make(chan bool)
-			doneChan := make(chan bool)
-			errChan := make(chan int)
-			messages := structs.ChannelMessages{
-				Quit:  quitChan,
-				Done:  doneChan,
-				Error: errChan,
-			}
-			pendingChanges[change.File.Path] = messages
+			doneChan := make(chan interface{})
+			newDones <- doneChan
+			errChan := make(chan interface{})
+			newErrors <- errChan
+			pendingChanges[change.File.Path] = quitChan
 			change.Quit = quitChan
 			change.Done = doneChan
 			change.Error = errChan
-			// if change.IsCreate {
 
-			// }
 		}
 	}
 	fmt.Println(fileSystemState)
