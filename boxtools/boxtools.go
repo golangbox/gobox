@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -107,25 +108,64 @@ func changeRandomPartOfFile(path string) (err error) {
 }
 
 func SimulateFilesystemChanges(dir string, inserts int, alters int, deletes int) {
-
+	counter := 0
 	inserted := make([]string, 0)
 	for i := 0; i < inserts; i++ {
 		path := GenerateFilePathFromRoot(dir, 1)
 		err := WriteRandomFileContent(path)
 		if err == nil {
+			counter++
 			inserted = append(inserted, path)
 		}
 	}
 	fmt.Println(len(inserted))
 	for i := 0; i < alters; i++ {
 		changeRandomPartOfFile(inserted[i])
+		counter++
 	}
 	for i := 0; i < deletes; i++ {
 		err := os.Remove(inserted[i])
+		counter++
 		if err != nil {
 			fmt.Println("Failed to remove a file in simulateFilesystemChanges")
 		}
 	}
+	fmt.Println(counter)
+}
+
+func CleanTestFolder(path string, ignores map[string]bool, rootDir bool) (err error) {
+	ignored := 0
+	infos, err := ioutil.ReadDir(path)
+	if err != nil {
+		return
+	}
+	for _, fi := range infos {
+		if fi.Name() == "." || fi.Name() == ".." {
+			continue
+		}
+		fileName := path + string(filepath.Separator) + fi.Name()
+		fmt.Println(fileName)
+		if _, found := ignores[fi.Name()]; found {
+			ignored++
+			continue
+		}
+		if fi.IsDir() {
+			err = CleanTestFolder(fileName, ignores, false)
+			if err != nil {
+				return
+			}
+			err = os.Remove(fileName)
+			return
+		}
+		err = os.Remove(fileName)
+		if err != nil {
+			return
+		}
+	}
+	if ignored != 0 && !rootDir {
+		err = errors.New("Cannot delete a non-empty folder")
+	}
+	return
 }
 
 func GenerateRandomFile(user_id int) (file structs.File, err error) {

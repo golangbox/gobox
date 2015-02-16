@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -73,6 +74,7 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 						if debug {
 							// DebugMessage("Detected new file %s", event.Name)
 						}
+						fmt.Println("create")
 
 						watcher.Files <- structs.StateChange{
 							File: structs.File{
@@ -88,6 +90,7 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 					if debug {
 						// DebugMessage("Detected file modification %s", event.Name)
 					}
+					fmt.Println("write")
 					watcher.Files <- structs.StateChange{
 						File: structs.File{
 							Path: event.Name,

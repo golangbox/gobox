@@ -151,45 +151,43 @@ func hasher(change structs.StateChange) {
 	return
 }
 
-type ArbitraryFanIn struct {
-	Chans  []reflect.SelectCase
-	ErrOut <-chan interface{}
-}
+// potential for deadly embrace when stephen tries to send a new channel while this func
+// blocks on sending on out
 
-// func (s *ArbitraryFanIn) AddChannel(chan
-
-func FanNIn(newChannels <-chan chan interface{}, out chan<- interface{}, removeOnEvent bool) {
-	var ch <-chan interface{}
-	chans := make([]reflect.SelectCase, 0)
-	timeout := time.Tick(1000 * time.Millisecond)
-	chans = append(chans, reflect.SelectCase{
-		Dir:  reflect.SelectRecv,
-		Chan: reflect.ValueOf(timeout),
-	})
-	for {
-		select {
-		case ch = <-newChannels:
-			chans = append(chans, reflect.SelectCase{
-				Dir:  reflect.SelectRecv,
-				Chan: reflect.ValueOf(ch),
-			})
-		default:
-			chosen, value, ok := reflect.Select(chans)
-			if chosen == 0 {
-				fmt.Println("timeout")
-				continue
-			}
-			if removeOnEvent || !ok {
-				lastIndex := len(chans) - 1
-				chans[chosen] = chans[lastIndex]
-				chans = chans[:lastIndex]
-			}
-			if ok {
-				out <- value.Interface()
+// fix was to add a go func to write to out. I don't love this solution becuase it makes order
+// of stuff coming out of the out channel non-deterministic, so any other ideas are invited.
+func arbitraryFanIn(newChannels <-chan chan interface{}, out chan<- interface{}, removeOnEvent bool) {
+	go func() {
+		var ch <-chan interface{}
+		chans := make([]reflect.SelectCase, 0)
+		timeout := time.Tick(10 * time.Millisecond)
+		chans = append(chans, reflect.SelectCase{
+			Dir:  reflect.SelectRecv,
+			Chan: reflect.ValueOf(timeout),
+		})
+		for {
+			select {
+			case ch = <-newChannels:
+				chans = append(chans, reflect.SelectCase{
+					Dir:  reflect.SelectRecv,
+					Chan: reflect.ValueOf(ch),
+				})
+			default:
+				chosen, value, ok := reflect.Select(chans)
+				if chosen == 0 {
+					continue
+				}
+				if removeOnEvent || !ok {
+					lastIndex := len(chans) - 1
+					chans[chosen] = chans[lastIndex]
+					chans = chans[:lastIndex]
+				}
+				if ok {
+					go func() { out <- value.Interface() }()
+				}
 			}
 		}
-
-	}
+	}()
 }
 
 func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
@@ -205,8 +203,8 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 	newDones := make((chan (chan interface{})))
 	errors := make(chan interface{})
 	dones := make(chan interface{})
-	go FanNIn(newErrors, errors, true)
-	go FanNIn(newDones, dones, true)
+	go arbitraryFanIn(newErrors, errors, true)
+	go arbitraryFanIn(newDones, dones, true)
 	for {
 		select {
 		case e := <-errors:
