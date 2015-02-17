@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"os"
 	"reflect"
 	"time"
@@ -28,10 +29,8 @@ import (
 var client api.Api
 
 const (
-	dataDirectoryBasename    = ".Gobox"
-	serverEndpoint           = "http://requestb.in/1mv9fa41"
-	filesystemCheckFrequency = 5
-	HASH_ERROR               = 1
+	dataDirectoryBasename = ".Gobox"
+	serverEndpoint        = "http://requestb.in/1mv9fa41"
 )
 
 func writeError(err error, change structs.StateChange, function string) {
@@ -60,26 +59,6 @@ func startWatcher(dir string) (out chan structs.StateChange, err error) {
 	return rw.Files, err
 }
 
-// type FileAction struct {
-// 	Id           int64
-// 	ClientId     int64
-// 	IsCreate     bool
-// 	CreatedAt    time.Time
-// 	PreviousHash string
-// 	File         File
-// 	FileId       int64
-// }
-
-// type StateChange struct {
-// 	File         File
-// 	IsCreate     bool
-// 	IsLocal      bool
-// 	Quit         <-chan bool
-// 	Done         chan<- interface{}
-// 	Error        chan<- interface{}
-// 	PreviousHash string
-// }
-
 func createServerStateChange(fa structs.FileAction) (change structs.StateChange) {
 	change.File = fa.File
 	change.IsCreate = fa.IsCreate
@@ -91,30 +70,45 @@ func createServerStateChange(fa structs.FileAction) (change structs.StateChange)
 // ah shoot! is this the only function that needs to know about the last fileaction ID state?
 // the following function is hypothetical and non-functional as of now
 
-// func serverActions(UDPPing <-chan bool, fileActionId int64) (out chan structs.StateChange,
-// 	errorChan chan interface{}, err error) {
-// 	go func() {
-// 		for {
-// 			<-UDPPing
-// 			// these return values are obviously wrong right now
-// 			fileActions, id, err := client.DownloadClientFileActions(fileActionId)
+func serverActions(UDPing <-chan bool, fileActionId int64) (out chan structs.StateChange,
+	errorChan chan interface{}, err error) {
+	go func() {
+		for {
+			<-UDPing
+			fmt.Println("-----------------PING RECIEVED--------------------")
+			// these return values are obviously wrong right now
+			clientFileActionResponse, err := client.DownloadClientFileActions(fileActionId)
+			// need to rethink errors, assumption of a statechange is invalid
+			if err != nil {
+				writeError(err, structs.StateChange{}, "serverActions")
+			}
+			fileActionId = clientFileActionResponse.LastId
+			for _, fileAction := range clientFileActionResponse.FileActions {
+				change := createServerStateChange(fileAction)
+				out <- change
+			}
 
-// 			// need to rethink errors, assumption of a statechange is invalid
-// 			if err != nil {
-// 				writeError(err, structs.StateChange{}, "serverActions")
-// 			}
-// 			for _, fileAction := range fileActions {
-// 				change := createServerStateChange(fileAction)
-// 				out <- change
-// 			}
-
-// 		}
-// 	}()
-// 	return
-// }
-
-func serverActions() (out chan structs.StateChange, err error) {
+		}
+	}()
 	return
+}
+
+func initUDPush() (notification chan bool, err error) {
+	go func() {
+		conn, err := net.Dial("udp", api.UDPEndpoint)
+		// defer conn.Close()
+		if err != nil {
+			return
+		}
+		response := make([]byte, 1)
+		for {
+			read, _ := conn.Read(response)
+			fmt.Println(read)
+			notification <- true
+		}
+	}()
+	return
+
 }
 
 func fanActionsIn(watcherActions <-chan structs.StateChange,
@@ -319,7 +313,7 @@ func arbitraryFanIn(newChannels <-chan chan interface{}, out chan<- interface{},
 	}()
 }
 
-func deleter(change structs.StateChange) {
+func serverDeleter(change structs.StateChange) {
 	_, err := os.Stat(change.File.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -338,28 +332,29 @@ func deleter(change structs.StateChange) {
 }
 
 func downloader(change structs.StateChange) {
-
 }
 
-func localDelete(change structs.StateChange) {
+func localDeleter(change structs.StateChange) {
 	go fileActionSender(change)
 }
 
-func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
+func stephen(dataPath string, stateChanges <-chan structs.StateChange,
+	fileSystemState structs.FileSystemState, inputErrChans []chan interface{}) {
 	// spin up a goroutine that will fan in error messages using reflect.select
 	// hand it an error channel, and add this to the main select statement
 	// do the same thing for done, so I can write a generic fan-n-in function
-	fileSystemState, err := fetchFileSystemState(dataPath)
-	if err != nil {
-		panic("Could not properly retrieve fileSystemState")
-	}
-	quitChannels := make(map[string]chan bool)
+	quitChannels := make(map[string]structs.CurrentAction)
 	newErrors := make((chan (chan interface{})))
 	newDones := make((chan (chan interface{})))
 	errors := make(chan interface{})
 	dones := make(chan interface{})
 	go arbitraryFanIn(newErrors, errors, true)
 	go arbitraryFanIn(newDones, dones, true)
+
+	for _, ch := range inputErrChans {
+		newErrors <- ch
+	}
+
 	for {
 		// maybe it would be better to combine errors and dones into the same multiplexor?
 		select {
@@ -373,13 +368,12 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 		case d := <-dones:
 			fa := d.(structs.FileAction)
 			delete(quitChannels, fa.File.Path)
-			fileSystemState.FileActionId = fa.Id
 			fileSystemState.State[fa.File.Path] = fa.File
 		case change := <-stateChanges:
-			if ch, found := quitChannels[change.File.Path]; found {
+			if currentAction, found := quitChannels[change.File.Path]; found {
 				// tell goroutine branch to quit
-				ch <- true
-				close(ch)
+				currentAction.Quit <- true
+				close(currentAction.Quit)
 			}
 			f, found := fileSystemState.State[change.File.Path]
 			if change.IsLocal {
@@ -396,7 +390,7 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 			newDones <- doneChan
 			errChan := make(chan interface{}, 1)
 			newErrors <- errChan
-			quitChannels[change.File.Path] = quitChan
+			quitChannels[change.File.Path] = structs.CurrentAction{Quit: quitChan, IsCreate: change.IsCreate}
 			change.Quit = quitChan
 			change.Done = doneChan
 			change.Error = errChan
@@ -409,10 +403,10 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 			} else {
 				if found {
 					if change.IsLocal {
-						go localDelete(change)
+						go localDeleter(change)
 					} else {
 						if f.Hash == change.PreviousHash {
-							go deleter(change)
+							go serverDeleter(change)
 							delete(fileSystemState.State, change.File.Path)
 						}
 
@@ -426,7 +420,7 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 }
 func run(path string) {
 	go func() {
-		fmt.Println("yo")
+		errChans := make([]chan interface{}, 0)
 		client = api.New("")
 		err := os.Chdir(path)
 		if err != nil {
@@ -434,20 +428,32 @@ func run(path string) {
 			return
 		}
 		goboxDirectory := "."
-		goboxDataDirectory := fmt.Sprint(goboxDirectory, "/", dataDirectoryBasename)
+		goboxDataDirectory := goboxDirectory + "/" + dataDirectoryBasename
+		goboxDataFile := goboxDataDirectory + "/data"
 		createGoboxLocalDirectory(goboxDataDirectory)
 		fmt.Println("WERLKWERLKJEWRLK", goboxDirectory, goboxDataDirectory)
 		watcherActions, err := startWatcher(goboxDirectory)
 		if err != nil {
 			panic("Could not start watcher")
 		}
-		remoteActions, err := serverActions()
+		UDPNotification, err := initUDPush()
+		if err != nil {
+			panic("Could not start UDP socket")
+		}
+		fileSystemState, err := fetchFileSystemState(goboxDataFile)
+		if err != nil {
+			panic("Could not properly retrieve fileSystemState")
+		}
+		// fix this to get correct fileActionID
+		remoteActions, errChan, err := serverActions(UDPNotification,
+			fileSystemState.FileActionId)
+		errChans = append(errChans, errChan)
 		if err != nil {
 			panic("Could not properly start remote actions")
 		}
 		actions := fanActionsIn(watcherActions, remoteActions)
 
-		stephen(goboxDataDirectory+"/data", actions)
+		stephen(goboxDataDirectory+"/data", actions, fileSystemState, errChans)
 
 		fmt.Println(watcherActions)
 		for {

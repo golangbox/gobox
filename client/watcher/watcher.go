@@ -51,15 +51,17 @@ func (watcher *RecursiveWatcher) AddFolder(folder string) {
 	if err != nil {
 		log.Println("Error watching: ", folder, err)
 	}
-	watcher.Folders <- folder
+	// watcher.Folders <- folder
 }
 
 func createLocalStateChange(path string, eventType int) (change structs.StateChange, err error) {
 	fi, err := os.Stat(path)
 	if err != nil {
 		if !(eventType == DELETE && os.IsNotExist(err)) {
+			fmt.Println("returning")
 			return
 		}
+		err = nil
 	}
 	change.IsCreate = (eventType != DELETE)
 	change.IsLocal = true
@@ -102,6 +104,7 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 							// DebugMessage("Detected new directory %s", event.Name)
 						}
 						if !shouldIgnoreFile(filepath.Base(event.Name)) {
+							fmt.Println("adding folder: ", event.Name)
 							watcher.AddFolder(event.Name)
 						}
 					} else {
@@ -130,8 +133,10 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 					watcher.Files <- change
 				}
 				if event.Op&fsnotify.Remove == fsnotify.Remove {
+					fmt.Println("Got the remove")
 					change, err := createLocalStateChange(event.Name, DELETE)
 					if err != nil {
+						fmt.Println("error")
 						continue
 					}
 					watcher.Files <- change

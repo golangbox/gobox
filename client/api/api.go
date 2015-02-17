@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	apiEndpoint = "http://localhost:8000/"
+	ApiEndpoint = "http://10.0.8.98:8000/"
+	UDPEndpoint = "http://10.0.8.98:4242"
 )
 
 type Api struct {
@@ -22,7 +23,7 @@ type Api struct {
 }
 
 func New(sessionKey string) (c Api) {
-	resp, err := http.Get(apiEndpoint + "login/")
+	resp, err := http.Get(ApiEndpoint + "login/")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -37,7 +38,7 @@ func New(sessionKey string) (c Api) {
 func (c *Api) apiRequest(endpoint string, body []byte,
 	fileType string) (*http.Response, error) {
 	return http.Post(
-		apiEndpoint+endpoint+"/?sessionKey="+c.sessionKey,
+		ApiEndpoint+endpoint+"/?sessionKey="+c.sessionKey,
 		"application/json",
 		bytes.NewBuffer(body),
 	)
@@ -102,7 +103,7 @@ func (c *Api) UploadFileToServer(fileBody []byte) (err error) {
 func (c *Api) DownloadFileFromServer(
 	hash string) (s3_url string, err error) {
 	resp, err := http.PostForm(
-		apiEndpoint+"download/",
+		ApiEndpoint+"download/",
 		url.Values{
 			"sessionKey": {c.sessionKey},
 			"fileHash":   {hash},
@@ -122,14 +123,12 @@ func (c *Api) DownloadFileFromServer(
 }
 
 // this needs to return the highest FileActionID
-func (c *Api) DownloadClientFileActions(
-	lastId int) (fileActions []structs.FileAction, err error) {
-
-	lastId = 0 // don't have support for this just yet
+func (c *Api) DownloadClientFileActions(lastId int64) (
+	clientFileActionsResponse structs.ClientFileActionsResponse, err error) {
 	var lastIdString string
-	lastIdString = strconv.Itoa(lastId)
+	lastIdString = strconv.FormatInt(lastId, 32)
 	resp, err := http.PostForm(
-		apiEndpoint+"/clients/",
+		ApiEndpoint+"/clients/",
 		url.Values{
 			"sessionKey": {c.sessionKey},
 			"lastID":     {lastIdString},
@@ -144,7 +143,7 @@ func (c *Api) DownloadClientFileActions(
 		return
 	}
 
-	err = json.Unmarshal(contents, &fileActions)
+	err = json.Unmarshal(contents, &clientFileActionsResponse)
 	if err != nil {
 		return
 	}

@@ -12,10 +12,14 @@ type StateChange struct {
 	PreviousHash string
 }
 
-type ChannelMessages struct {
-	Quit  chan<- bool
-	Done  <-chan interface{}
-	Error <-chan interface{}
+type CurrentAction struct {
+	Quit     chan<- bool
+	IsCreate bool
+}
+
+type ClientFileActionsResponse struct {
+	LastId      int64
+	FileActions []FileAction
 }
 
 type ErrorMessage struct {
