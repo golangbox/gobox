@@ -38,29 +38,28 @@ func (s *server) checkStatus() bool {
 	return false
 }
 
+func createDummyUser() error {
+	user, err := boxtools.NewUser("gobox@gmail.com", "password")
+	if err != nil {
+		return err
+	}
+	client, err := boxtools.NewClient(user, "test", false)
+	if err != nil {
+		return err
+	}
+	_ = client
+	return nil
+}
+
 func main() {
 
 	//Launch API
-	//api.ServeServerRoutes()
 
 	s := server{
 		name:        "Elvis",
 		ip:          "127.0.0.1",
 		port:        4242,
 		clientLimit: 10,
-	}
-
-	////Launch UDP notification service
-	////Define the Subject (The guy who is goin to hold all the clients)
-
-	s.pusher = UDPush.Pusher{
-		ServerID: s.ip,
-		BindedTo: s.port,
-	}
-
-	err := s.pusher.InitUDPush()
-	if err != nil {
-		fmt.Println(err)
 	}
 
 	model.DB, _ = gorm.Open(
@@ -75,23 +74,24 @@ func main() {
 		&structs.FileSystemFile{},
 	)
 
-	err = createDummyUser()
+	err := createDummyUser()
 	if err != nil {
 		log.Fatal(err)
 	}
+	////Launch UDP notification service
+	////Define the Subject (The guy who is goin to hold all the clients)
+
+	s.pusher = UDPush.Pusher{
+		ServerID: s.ip,
+		BindedTo: s.port,
+	}
+
+	go func() {
+		err = s.pusher.InitUDPush()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
 
 	api.ServeServerRoutes("8000")
-}
-
-func createDummyUser() error {
-	user, err := boxtools.NewUser("gobox@gmail.com", "password")
-	if err != nil {
-		return err
-	}
-	client, err := boxtools.NewClient(user, "test", false)
-	if err != nil {
-		return err
-	}
-	_ = client
-	return nil
 }
