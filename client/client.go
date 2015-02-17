@@ -228,9 +228,9 @@ func fileActionSender(change structs.StateChange) {
 			writeDone(change, fileActions[0])
 			return
 		}
-		for _, need := range needed {
-			go uploader(need, change, fileActions[0])
-		}
+		// need to fix this to just get responses for one file
+		go uploader(change.File.Path, change, fileActions[0])
+
 	}
 	return
 }
