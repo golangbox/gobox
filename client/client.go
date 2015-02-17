@@ -42,6 +42,7 @@ func writeError(err error, change structs.StateChange, function string) {
 	close(change.Done)
 }
 
+// it may be easier to just have this function make a FileAction, but ignore for now
 func writeDone(change structs.StateChange, fa structs.FileAction) {
 	change.Done <- fa
 	close(change.Error)
@@ -197,6 +198,15 @@ func getSha256FromFilename(filename string) (sha256String string,
 	return sha256String, nil
 }
 
+func makeFileAction(change structs.StateChange) (fa structs.FileAction) {
+	fa.IsCreate = change.IsCreate
+	fa.CreatedAt = change.File.CreatedAt
+	fa.FileId = change.File.Id
+	fa.File = change.File
+	fa.PreviousHash = change.PreviousHash
+	return
+}
+
 func fileActionSender(change structs.StateChange) {
 	select {
 	case <-change.Quit:
@@ -204,13 +214,7 @@ func fileActionSender(change structs.StateChange) {
 		return
 	default:
 		fileActions := make([]structs.FileAction, 1)
-		fileActions[0] = structs.FileAction{
-			IsCreate:     change.IsCreate,
-			CreatedAt:    change.File.CreatedAt,
-			FileId:       change.File.Id,
-			File:         change.File,
-			PreviousHash: change.PreviousHash,
-		}
+		fileActions[0] = makeFileAction(change)
 
 		needed, err := client.SendFileActionsToServer(fileActions)
 		if err != nil {
@@ -312,6 +316,24 @@ func arbitraryFanIn(newChannels <-chan chan interface{}, out chan<- interface{},
 	}()
 }
 
+func deleter(change structs.StateChange) {
+	fi, err := os.Stat(change.File.Path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeDone(change, makeFileAction(change))
+			return
+		}
+		writeError(err, change, "deleter")
+		return
+	}
+	err = os.Remove(change.File.Path)
+	if err != nil {
+		writeError(err, change, "deleter")
+		return
+	}
+	writeDone(change, makeFileAction(change))
+}
+
 func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 	// spin up a goroutine that will fan in error messages using reflect.select
 	// hand it an error channel, and add this to the main select statement
@@ -348,10 +370,13 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 				ch <- true
 				close(ch)
 			}
-			if f, found := fileSystemState.State[change.File.Path]; found {
-				change.PreviousHash = f.Hash
-			} else {
-				change.PreviousHash = ""
+			f, found := fileSystemState.State[change.File.Path]
+			if change.IsLocal {
+				if found {
+					change.PreviousHash = f.Hash
+				} else {
+					change.PreviousHash = ""
+				}
 			}
 
 			fmt.Println(change)
@@ -364,7 +389,20 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 			change.Quit = quitChan
 			change.Done = doneChan
 			change.Error = errChan
-			go hasher(change)
+			if change.IsCreate {
+				if change.IsLocal {
+					go hasher(change)
+				} else {
+					go downloader(change)
+				}
+			} else {
+				if found {
+					if f.Hash == change.PreviousHash {
+						go deleter(change)
+						delete(fileSystemState.State, change.File.Path)
+					}
+				}
+			}
 
 		}
 	}
