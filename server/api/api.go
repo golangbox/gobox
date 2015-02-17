@@ -22,8 +22,8 @@ func ServeServerRoutes(port string) {
 
 	// public
 	r.HandleFunc("/", IndexHandler)
-	r.HandleFunc("/login/", SignUpHandler).Methods("POST")
-	r.HandleFunc("/sign-up/", LoginHandler).Methods("POST")
+	r.HandleFunc("/login/", LoginHandler).Methods("GET")
+	r.HandleFunc("/sign-up/", SignUpHandler).Methods("POST")
 
 	// require client authentication
 	r.HandleFunc("/file-actions/", sessionValidate(FileActionsHandler)).Methods("POST")
@@ -297,6 +297,7 @@ func SignUpHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func LoginHandler(w http.ResponseWriter, req *http.Request) {
-	// wants username and password posted as a form?
-
+	var client structs.Client
+	model.DB.Where("name = ?", "test").First(&client)
+	w.Write([]byte(client.SessionKey))
 }

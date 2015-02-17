@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/golangbox/gobox/UDPush"
+	"github.com/golangbox/gobox/boxtools"
 	"github.com/golangbox/gobox/server/api"
 	"github.com/golangbox/gobox/server/model"
 	"github.com/golangbox/gobox/structs"
@@ -73,5 +75,23 @@ func main() {
 		&structs.FileSystemFile{},
 	)
 
+	err = createDummyUser()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	api.ServeServerRoutes("8000")
+}
+
+func createDummyUser() error {
+	user, err := boxtools.NewUser("gobox@gmail.com", "password")
+	if err != nil {
+		return err
+	}
+	client, err := boxtools.NewClient(user, "test", false)
+	if err != nil {
+		return err
+	}
+	_ = client
+	return nil
 }

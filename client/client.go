@@ -5,14 +5,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/golangbox/gobox/client/api"
-	"github.com/golangbox/gobox/client/watcher"
-	"github.com/golangbox/gobox/structs"
 	"io/ioutil"
 	"log"
 	"os"
 	"reflect"
 	"time"
+
+	"github.com/golangbox/gobox/client/api"
+	"github.com/golangbox/gobox/client/watcher"
+	"github.com/golangbox/gobox/structs"
 	// "github.com/golangbox/gobox/client/api"
 )
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -21,7 +22,15 @@ type Api struct {
 }
 
 func New(sessionKey string) (c Api) {
-	c.sessionKey = sessionKey
+	resp, err := http.Get(apiEndpoint + "/login/")
+	if err != nil {
+		log.Fatal(err)
+	}
+	keyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	c.sessionKey = string(keyBytes)
 	return
 }
 
