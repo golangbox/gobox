@@ -22,6 +22,11 @@ type ClientFileActionsResponse struct {
 	FileActions []FileAction
 }
 
+type ClientFileActionsResponse struct {
+	LastId      int64
+	FileActions []FileAction
+}
+
 type ErrorMessage struct {
 	Error    error
 	File     File

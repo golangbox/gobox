@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"text/template"
 
 	"github.com/golangbox/gobox/boxtools"
 	"github.com/golangbox/gobox/server/model"
@@ -16,7 +18,16 @@ import (
 	"github.com/sqs/mux"
 )
 
+var T *template.Template
+
+func RenderTemplate(w http.ResponseWriter, tmpl string, data interface{}) {
+	T.ExecuteTemplate(w, tmpl+".html", data)
+}
+
 func ServeServerRoutes(port string) {
+	var err error
+	T, err = template.ParseGlob("templates/*")
+	_ = err
 	r := mux.NewRouter()
 	r.StrictSlash(true)
 
@@ -24,6 +35,7 @@ func ServeServerRoutes(port string) {
 	r.HandleFunc("/", IndexHandler)
 	r.HandleFunc("/login/", LoginHandler).Methods("GET")
 	r.HandleFunc("/sign-up/", SignUpHandler).Methods("POST")
+	r.HandleFunc("/file-data/", FilesHandler).Methods("POST")
 
 	// require client authentication
 	r.HandleFunc("/file-actions/", sessionValidate(FileActionsHandler)).Methods("POST")
@@ -50,6 +62,7 @@ func (h *httpError) check() bool {
 	if h.err != nil {
 		h.responseWriter.WriteHeader(h.code)
 		h.responseWriter.Write([]byte(h.err.Error()))
+		log.Fatal(h.err)
 		return true
 	} else {
 		return false
@@ -58,6 +71,7 @@ func (h *httpError) check() bool {
 
 func sessionValidate(fn func(http.ResponseWriter, *http.Request, structs.Client)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL)
 		client, err := verifyAndReturnClient(r)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -108,17 +122,31 @@ func FileActionsHandler(w http.ResponseWriter, req *http.Request,
 		value.ClientId = client.Id
 	}
 
-	httpError.err = boxtools.WriteFileActionsToDatabase(fileActions, client)
+	fileActions, httpError.err = boxtools.WriteFileActionsToDatabase(fileActions, client)
 	httpError.code = http.StatusInternalServerError
 	if httpError.check() {
 		return
+	}
+
+	var user structs.User
+	query := model.DB.Model(&client).Related(&user)
+	httpError.err = query.Error
+	if httpError.check() {
+		return
+	}
+
+	errs := boxtools.ApplyFileActionsToFileSystemFileTable(fileActions, user)
+	if len(errs) != 0 {
+		fmt.Println(errs)
 	}
 
 	var hashesThatNeedToBeUploaded []string
 	hashMap := make(map[string]bool)
 	// write to a map to remove any duplicate hashes
 	for _, value := range fileActions {
-		hashMap[value.File.Hash] = true
+		if value.IsCreate == true {
+			hashMap[value.File.Hash] = true
+		}
 	}
 	for key, _ := range hashMap {
 		var exists bool
@@ -240,6 +268,14 @@ func ClientsFileActionsHandler(w http.ResponseWriter, req *http.Request,
 	httpError := httpError{responseWriter: w}
 	httpError.code = http.StatusInternalServerError
 
+	lastIdString := req.FormValue("lastId")
+	if lastIdString == "" {
+		httpError.err = fmt.Errorf("Need last fileAction Id.")
+		if httpError.check() {
+			return
+		}
+	}
+
 	var user structs.User
 	query := model.DB.Model(&client).Related(&user)
 	httpError.err = query.Error
@@ -261,19 +297,12 @@ func ClientsFileActionsHandler(w http.ResponseWriter, req *http.Request,
 
 	var fileActions []structs.FileAction
 	query = model.DB.Where("client_id in (?)", clientIds).
-		Where("Id > ?", client.LastSynchedFileActionId).
+		Where("Id > ?", lastIdString).
 		Find(&fileActions)
 	httpError.err = query.Error
 	if httpError.check() {
 		return
 	}
-
-	var responseJsonBytes []byte
-	responseJsonBytes, httpError.err = json.Marshal(fileActions)
-	if httpError.check() {
-		return
-	}
-	w.Write(responseJsonBytes)
 
 	var highestId int64
 	for _, value := range fileActions {
@@ -281,13 +310,42 @@ func ClientsFileActionsHandler(w http.ResponseWriter, req *http.Request,
 			highestId = value.Id
 		}
 	}
-	client.LastSynchedFileActionId = highestId
+
+	fileActions = boxtools.RemoveRedundancyFromFileActions(fileActions)
+
+	responseStruct := structs.ClientFileActionsResponse{
+		LastId:      highestId,
+		FileActions: fileActions,
+	}
+
+	var responseJsonBytes []byte
+	responseJsonBytes, httpError.err = json.Marshal(responseStruct)
+	if httpError.check() {
+		return
+	}
+	w.Write(responseJsonBytes)
+
 	model.DB.Save(&client)
 
 }
 
-func IndexHandler(w http.ResponseWriter, req *http.Request) {
+func FilesHandler(w http.ResponseWriter, req *http.Request) {
+	var client structs.Client
+	query := model.DB.Where("name =  ?", "test").First(&client)
+	var user structs.User
+	query = model.DB.Where("id = ?", client.UserId).First(&user)
+	fmt.Println(user)
+	var files structs.FileSystemFile
+	query = model.DB.Where("user_id = ?", user.Id).Find(&files)
+	if query.Error != nil {
+		panic(query.Error)
+	}
+	jsonBytes, _ := json.Marshal(files)
+	w.Write(jsonBytes)
+}
 
+func IndexHandler(w http.ResponseWriter, req *http.Request) {
+	RenderTemplate(w, "index", nil)
 }
 
 func SignUpHandler(w http.ResponseWriter, req *http.Request) {

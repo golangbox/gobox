@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -192,9 +193,10 @@ func GenerateRandomFileAction(client_id int, user_id int, isCreate bool) (fileAc
 	if err != nil {
 		return fileAction, err
 	}
+	_ = isCreate
 	return structs.FileAction{
 		ClientId:  int64(client_id),
-		IsCreate:  isCreate,
+		IsCreate:  true,
 		CreatedAt: time.Now(),
 		File:      file,
 	}, err
@@ -377,17 +379,19 @@ func ComputeFilesFromFileActions(fileActions []structs.FileAction) (files []stru
 	return
 }
 
-func WriteFileActionsToDatabase(fileActions []structs.FileAction, client structs.Client) (err error) {
+func WriteFileActionsToDatabase(fileActions []structs.FileAction,
+	client structs.Client) (outPutFileActions []structs.FileAction,
+	err error) {
 	var user structs.User
 	query := model.DB.Model(&client).Related(&user)
 	if query.Error != nil {
 		err = query.Error
-		return
+		return outPutFileActions, err
 	}
 	for _, fileAction := range fileActions {
 		file, err := FindFile(fileAction.File.Hash, fileAction.File.Path, user)
 		if err != nil {
-			return err
+			return outPutFileActions, err
 		}
 		if file.Id != 0 {
 			// if the file exists, assign an id
@@ -398,11 +402,15 @@ func WriteFileActionsToDatabase(fileActions []structs.FileAction, client structs
 			fileAction.File = structs.File{}
 		}
 		query = model.DB.Create(&fileAction)
+		outPutFileActions = append(
+			outPutFileActions,
+			fileAction,
+		)
 		if query.Error != nil {
-			return query.Error
+			return outPutFileActions, query.Error
 		}
 	}
-	return
+	return outPutFileActions, nil
 }
 
 func FindFile(hash string, path string, user structs.User) (file structs.File, err error) {
@@ -421,22 +429,44 @@ func FindFile(hash string, path string, user structs.User) (file structs.File, e
 	return //this should never happen
 }
 
-func ApplyFileActionsToFilesTable(fileActions []structs.FileAction, user structs.User) (err error) {
-	// for _, fileAction := range fileActions {
-	// 	if fileAction.IsCreate == true {
-	// 		// what if the path is the same?
-	// 		model.DB.Create(&fileAction.File)
-	// 	} else {
-	// 		var file structs.File
-	// 		query := model.DB.Where("path = ?", fileAction.File.Path).First(&file)
-	// 		if query.Error != nil {
-	// 			// uh oh
-	// 		}
-	// 		if file.Hash != fileAction.File.Hash {
-	// 			// uh oh
-	// 		}
-	// 		model.DB.Delete(&file)
-	// 	}
-	// }
+func ApplyFileActionsToFileSystemFileTable(fileActions []structs.FileAction, user structs.User) (errs []error) {
+	for _, fileAction := range fileActions {
+		// get file for fileaction
+		var file structs.File
+		model.DB.First(&file, fileAction.FileId)
+		if fileAction.IsCreate == true {
+			err := deleteFileSystemFileAtPath(file.Path, user)
+			if err != nil {
+				log.Fatal(err)
+				errs = append(errs, err)
+			}
+			newFileSystemFile := structs.FileSystemFile{
+				UserId: user.Id,
+				FileId: fileAction.FileId,
+				Path:   file.Path,
+			}
+			query := model.DB.Create(&newFileSystemFile)
+			if query.Error != nil {
+				fmt.Println(query.Error)
+			}
+		} else {
+			err := deleteFileSystemFileAtPath(file.Path, user)
+			if err != nil {
+				log.Fatal(err)
+				errs = append(errs, err)
+			}
+		}
+	}
+	return
+}
+
+func deleteFileSystemFileAtPath(path string, user structs.User) (err error) {
+	query := model.DB.
+		Where("path = ?", path).
+		Where("user_id = ?", user.Id).
+		Delete(structs.FileSystemFile{})
+	if query.Error != nil {
+		return query.Error
+	}
 	return
 }
