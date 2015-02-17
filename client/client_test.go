@@ -120,5 +120,13 @@ func TestArbitraryFanIn(t *testing.T) {
 }
 
 func TestStephen(t *testing.T) {
+	run(sandboxDir)
+	go boxtools.SimulateFilesystemChanges(sandboxDir, 10, 5, 0)
+	for {
+		time.Sleep(1000)
+	}
+}
+
+func TestHasherQuitsProperly(t *testing.T) {
 
 }

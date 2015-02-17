@@ -2,7 +2,7 @@ package watcher
 
 import (
 	"errors"
-	"fmt"
+
 	"log"
 	"os"
 	"path/filepath"
@@ -10,6 +10,12 @@ import (
 
 	"github.com/go-fsnotify/fsnotify"
 	"github.com/golangbox/gobox/structs"
+)
+
+const (
+	CREATE = 0
+	MODIFY = 1
+	DELETE = 2
 )
 
 type RecursiveWatcher struct {
@@ -47,6 +53,28 @@ func (watcher *RecursiveWatcher) AddFolder(folder string) {
 	watcher.Folders <- folder
 }
 
+func createLocalStateChange(path string, eventType int) (change structs.StateChange, err error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		if !(eventType == DELETE && os.IsNotExist(err)) {
+			return
+		}
+	}
+	change.IsCreate = (eventType != DELETE)
+	change.IsLocal = true
+	change.File.Path = path
+	if eventType != DELETE {
+		change.File.Name = fi.Name()
+		change.File.Size = fi.Size()
+		change.File.Modified = fi.ModTime()
+		// hmmm, what do we do if the file wasn't created? os.Stat doesn't provide created
+		if eventType == CREATE {
+			change.File.CreatedAt = fi.ModTime()
+		}
+	}
+	return
+}
+
 func (watcher *RecursiveWatcher) Run(debug bool) {
 	go func() {
 		for {
@@ -55,6 +83,11 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 				if ext := filepath.Ext(event.Name); ext == ".tmp" {
 					continue
 				}
+				absPath, err := filepath.Abs(event.Name)
+				if err == nil {
+					event.Name = absPath
+				}
+
 				// create a file/directory
 				if event.Op&fsnotify.Create == fsnotify.Create {
 					fi, err := os.Stat(event.Name)
@@ -74,14 +107,12 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 						if debug {
 							// DebugMessage("Detected new file %s", event.Name)
 						}
-						fmt.Println("create")
 
-						watcher.Files <- structs.StateChange{
-							File: structs.File{
-								Path: event.Name,
-							},
-							IsCreate: true,
+						change, err := createLocalStateChange(event.Name, CREATE)
+						if err != nil {
+							continue
 						}
+						watcher.Files <- change
 					}
 				}
 
@@ -90,21 +121,20 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 					if debug {
 						// DebugMessage("Detected file modification %s", event.Name)
 					}
-					fmt.Println("write")
-					watcher.Files <- structs.StateChange{
-						File: structs.File{
-							Path: event.Name,
-						},
-						IsCreate: true,
+
+					change, err := createLocalStateChange(event.Name, MODIFY)
+					if err != nil {
+						continue
 					}
+					watcher.Files <- change
 				}
 				if event.Op&fsnotify.Remove == fsnotify.Remove {
-					watcher.Files <- structs.StateChange{
-						File: structs.File{
-							Path: event.Name,
-						},
-						IsCreate: false,
+					change, err := createLocalStateChange(event.Name, DELETE)
+					if err != nil {
+						continue
 					}
+					watcher.Files <- change
+
 				}
 
 			case err := <-watcher.Errors:

@@ -5,19 +5,26 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/golangbox/gobox/client/api"
+	"github.com/golangbox/gobox/client/watcher"
+	"github.com/golangbox/gobox/structs"
 	"io/ioutil"
 	"log"
 	"os"
 	"reflect"
 	"time"
-
-	"github.com/golangbox/gobox/client/watcher"
-	"github.com/golangbox/gobox/structs"
 	// "github.com/golangbox/gobox/client/api"
 )
 
+// TODO
+// get client/server sessions set up
+// sync a damn file
+// work on download branch
+
 // PROBLEMS: No way to tell if a remove event was dir or a file because it can't be os.Stat'ed
 //           Can't remove that dir from a watch because Watcher.watches isn't exposed
+
+var client api.Api
 
 const (
 	dataDirectoryBasename    = ".Gobox"
@@ -26,6 +33,20 @@ const (
 	HASH_ERROR               = 1
 )
 
+func writeError(err error, change structs.StateChange, function string) {
+	change.Error <- structs.ErrorMessage{
+		Error:    err,
+		File:     change.File,
+		Function: function,
+	}
+	close(change.Done)
+}
+
+func writeDone(change structs.StateChange, fa structs.FileAction) {
+	change.Done <- fa
+	close(change.Error)
+}
+
 func startWatcher(dir string) (out chan structs.StateChange, err error) {
 	rw, err := watcher.NewRecursiveWatcher(dir)
 	if err != nil {
@@ -33,9 +54,61 @@ func startWatcher(dir string) (out chan structs.StateChange, err error) {
 
 	}
 	rw.Run(false)
-	fmt.Println("about to fail")
 	return rw.Files, err
 }
+
+// type FileAction struct {
+// 	Id           int64
+// 	ClientId     int64
+// 	IsCreate     bool
+// 	CreatedAt    time.Time
+// 	PreviousHash string
+// 	File         File
+// 	FileId       int64
+// }
+
+// type StateChange struct {
+// 	File         File
+// 	IsCreate     bool
+// 	IsLocal      bool
+// 	Quit         <-chan bool
+// 	Done         chan<- interface{}
+// 	Error        chan<- interface{}
+// 	PreviousHash string
+// }
+
+func createServerStateChange(fa structs.FileAction) (change structs.StateChange) {
+	change.File = fa.File
+	change.IsCreate = fa.IsCreate
+	change.IsLocal = false
+	change.PreviousHash = fa.PreviousHash
+	return
+}
+
+// ah shoot! is this the only function that needs to know about the last fileaction ID state?
+// the following function is hypothetical and non-functional as of now
+
+// func serverActions(UDPPing <-chan bool, fileActionId int64) (out chan structs.StateChange,
+// 	errorChan chan interface{}, err error) {
+// 	go func() {
+// 		for {
+// 			<-UDPPing
+// 			// these return values are obviously wrong right now
+// 			fileActions, id, err := client.DownloadClientFileActions(fileActionId)
+
+// 			// need to rethink errors, assumption of a statechange is invalid
+// 			if err != nil {
+// 				writeError(err, structs.StateChange{}, "serverActions")
+// 			}
+// 			for _, fileAction := range fileActions {
+// 				change := createServerStateChange(fileAction)
+// 				out <- change
+// 			}
+
+// 		}
+// 	}()
+// 	return
+// }
 
 func serverActions() (out chan structs.StateChange, err error) {
 	return
@@ -96,7 +169,6 @@ func fetchFileSystemState(path string) (fileSystemState structs.FileSystemState,
 		fmt.Println(err.Error())
 		return
 	}
-	fmt.Println("also here")
 	if data != nil {
 		err = json.Unmarshal(data, &fileSystemState)
 		if err != nil {
@@ -128,21 +200,71 @@ func getSha256FromFilename(filename string) (sha256String string,
 func fileActionSender(change structs.StateChange) {
 	select {
 	case <-change.Quit:
+		gracefulQuit(change)
 		return
 	default:
+		fileActions := make([]structs.FileAction, 1)
+		fileActions[0] = structs.FileAction{
+			IsCreate:     change.IsCreate,
+			CreatedAt:    change.File.CreatedAt,
+			FileId:       change.File.Id,
+			File:         change.File,
+			PreviousHash: change.PreviousHash,
+		}
 
+		needed, err := client.SendFileActionsToServer(fileActions)
+		if err != nil {
+			writeError(err, change, "fileActionSender")
+			return
+		}
+		// if len needed 0, need to do cleanup by signaling done
+		if len(needed) == 0 {
+			writeDone(change, fileActions[0])
+			return
+		}
+		for _, need := range needed {
+			go uploader(need, change, fileActions[0])
+		}
 	}
+	return
+}
 
+func uploader(path string, change structs.StateChange, fa structs.FileAction) {
+	select {
+	case <-change.Quit:
+		gracefulQuit(change)
+		return
+	default:
+		buf, err := ioutil.ReadFile(path)
+		if err != nil {
+			writeError(err, change, "uploader")
+			return
+		}
+		err = client.UploadFileToServer(buf)
+		if err != nil {
+			writeError(err, change, "uploader")
+			return
+		}
+		change.Done <- fa
+		close(change.Error)
+	}
+	return
+}
+
+func gracefulQuit(change structs.StateChange) {
+	close(change.Done)
+	close(change.Error)
 }
 
 func hasher(change structs.StateChange) {
 	select {
 	case <-change.Quit:
+		gracefulQuit(change)
 		return
 	default:
 		h, err := getSha256FromFilename(change.File.Path)
 		if err != nil {
-			change.Error <- HASH_ERROR
+			writeError(err, change, "hasher")
 			return
 		}
 		change.File.Hash = h
@@ -198,7 +320,7 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 	if err != nil {
 		panic("Could not properly retrieve fileSystemState")
 	}
-	pendingChanges := make(map[string]chan bool)
+	quitChannels := make(map[string]chan bool)
 	newErrors := make((chan (chan interface{})))
 	newDones := make((chan (chan interface{})))
 	errors := make(chan interface{})
@@ -206,51 +328,74 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 	go arbitraryFanIn(newErrors, errors, true)
 	go arbitraryFanIn(newDones, dones, true)
 	for {
+		// maybe it would be better to combine errors and dones into the same multiplexor?
 		select {
 		case e := <-errors:
-			pth := reflect.ValueOf(e).FieldByName("Path")
-			fmt.Println("Experienced an error with ", pth)
-			// delete(pendingChanges, err
-
+			msg := e.(structs.ErrorMessage)
+			fmt.Println("Experienced an error with ", msg.File.Path)
+			fmt.Println("In function: ", msg.Function)
+			fmt.Println("Error: ", msg.Error)
+			fmt.Println("File: ", msg.File)
+			delete(quitChannels, msg.File.Path)
+		case d := <-dones:
+			fa := d.(structs.FileAction)
+			delete(quitChannels, fa.File.Path)
+			fileSystemState.FileActionId = fa.Id
+			fileSystemState.State[fa.File.Path] = fa.File
 		case change := <-stateChanges:
+			if ch, found := quitChannels[change.File.Path]; found {
+				// tell goroutine branch to quit
+				ch <- true
+				close(ch)
+			}
+			if f, found := fileSystemState.State[change.File.Path]; found {
+				change.PreviousHash = f.Hash
+			} else {
+				change.PreviousHash = ""
+			}
+
 			fmt.Println(change)
-			quitChan := make(chan bool)
-			doneChan := make(chan interface{})
+			quitChan := make(chan bool, 1)
+			doneChan := make(chan interface{}, 1)
 			newDones <- doneChan
-			errChan := make(chan interface{})
+			errChan := make(chan interface{}, 1)
 			newErrors <- errChan
-			pendingChanges[change.File.Path] = quitChan
+			quitChannels[change.File.Path] = quitChan
 			change.Quit = quitChan
 			change.Done = doneChan
 			change.Error = errChan
+			go hasher(change)
 
 		}
 	}
 	fmt.Println(fileSystemState)
-
 }
 
 func run(path string) {
-	goboxDirectory := path
-	goboxDataDirectory := fmt.Sprint(goboxDirectory, "/", dataDirectoryBasename)
-	createGoboxLocalDirectory(goboxDataDirectory)
-	watcherActions, err := startWatcher(path)
-	if err != nil {
-		panic("Could not start watcher")
-	}
-	remoteActions, err := serverActions()
-	if err != nil {
-		panic("Could not properly start remote actions")
-	}
-	actions := fanActionsIn(watcherActions, remoteActions)
+	go func() {
+		client = api.New("foo")
 
-	stephen(goboxDataDirectory+"/data", actions)
+		goboxDirectory := path
+		goboxDataDirectory := fmt.Sprint(goboxDirectory, "/", dataDirectoryBasename)
+		createGoboxLocalDirectory(goboxDataDirectory)
+		watcherActions, err := startWatcher(path)
+		if err != nil {
+			panic("Could not start watcher")
+		}
+		remoteActions, err := serverActions()
+		if err != nil {
+			panic("Could not properly start remote actions")
+		}
+		actions := fanActionsIn(watcherActions, remoteActions)
 
-	fmt.Println(watcherActions)
-	for {
-		time.Sleep(1000)
-	}
+		stephen(goboxDataDirectory+"/data", actions)
 
+		fmt.Println(watcherActions)
+		for {
+			time.Sleep(1000)
+		}
+
+	}()
 }
 
 func main() {

@@ -18,6 +18,12 @@ type ChannelMessages struct {
 	Error <-chan interface{}
 }
 
+type ErrorMessage struct {
+	Error    error
+	File     File
+	Function string
+}
+
 type FileSystemState struct {
 	FileActionId int64
 	State        map[string]File
