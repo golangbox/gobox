@@ -291,9 +291,12 @@ func IndexHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func SignUpHandler(w http.ResponseWriter, req *http.Request) {
+	// wants username and pass1 and pass2 posted as a form?
+	// returns 200 or  some sort of error to client?
 
 }
 
 func LoginHandler(w http.ResponseWriter, req *http.Request) {
+	// wants username and password posted as a form?
 
 }
