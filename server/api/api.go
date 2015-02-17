@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"text/template"
 
+	"github.com/golangbox/gobox/UDPush"
 	"github.com/golangbox/gobox/boxtools"
 	"github.com/golangbox/gobox/server/model"
 	"github.com/golangbox/gobox/server/s3"
@@ -24,7 +25,11 @@ func RenderTemplate(w http.ResponseWriter, tmpl string, data interface{}) {
 	T.ExecuteTemplate(w, tmpl+".html", data)
 }
 
-func ServeServerRoutes(port string) {
+var Pusher UDPush.Pusher
+
+func ServeServerRoutes(port string, pusher UDPush.Pusher) {
+	Pusher = pusher
+
 	var err error
 	T, err = template.ParseGlob("templates/*")
 	_ = err
@@ -133,6 +138,14 @@ func FileActionsHandler(w http.ResponseWriter, req *http.Request,
 	httpError.err = query.Error
 	if httpError.check() {
 		return
+	}
+
+	var clients []structs.Client
+	model.DB.Where("user_id = ?", user.Id).
+		Not("id = ?", client.Id).
+		Find(&clients)
+	for _, value := range clients {
+		Pusher.Notify(value.SessionKey)
 	}
 
 	errs := boxtools.ApplyFileActionsToFileSystemFileTable(fileActions, user)
