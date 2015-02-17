@@ -2,7 +2,7 @@ package watcher
 
 import (
 	"errors"
-
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -26,6 +26,7 @@ type RecursiveWatcher struct {
 
 func NewRecursiveWatcher(path string) (*RecursiveWatcher, error) {
 	folders := Subfolders(path)
+	fmt.Println(folders)
 	if len(folders) == 0 {
 		return nil, errors.New("No folders to watch.")
 	}
@@ -83,10 +84,10 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 				if ext := filepath.Ext(event.Name); ext == ".tmp" {
 					continue
 				}
-				absPath, err := filepath.Abs(event.Name)
-				if err == nil {
-					event.Name = absPath
-				}
+				// absPath, err := filepath.Abs(event.Name)
+				// if err == nil {
+				// 	event.Name = absPath
+				// }
 
 				// create a file/directory
 				if event.Op&fsnotify.Create == fsnotify.Create {

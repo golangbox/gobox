@@ -22,7 +22,7 @@ type Api struct {
 }
 
 func New(sessionKey string) (c Api) {
-	resp, err := http.Get(apiEndpoint + "/login/")
+	resp, err := http.Get(apiEndpoint + "login/")
 	if err != nil {
 		log.Fatal(err)
 	}

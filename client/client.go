@@ -50,6 +50,7 @@ func writeDone(change structs.StateChange, fa structs.FileAction) {
 }
 
 func startWatcher(dir string) (out chan structs.StateChange, err error) {
+	fmt.Println(dir)
 	rw, err := watcher.NewRecursiveWatcher(dir)
 	if err != nil {
 		return out, err
@@ -240,6 +241,7 @@ func uploader(path string, change structs.StateChange, fa structs.FileAction) {
 		gracefulQuit(change)
 		return
 	default:
+		fmt.Println(path)
 		buf, err := ioutil.ReadFile(path)
 		if err != nil {
 			writeError(err, change, "uploader")
@@ -318,7 +320,7 @@ func arbitraryFanIn(newChannels <-chan chan interface{}, out chan<- interface{},
 }
 
 func deleter(change structs.StateChange) {
-	fi, err := os.Stat(change.File.Path)
+	_, err := os.Stat(change.File.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeDone(change, makeFileAction(change))
@@ -333,6 +335,14 @@ func deleter(change structs.StateChange) {
 		return
 	}
 	writeDone(change, makeFileAction(change))
+}
+
+func downloader(change structs.StateChange) {
+
+}
+
+func localDelete(change structs.StateChange) {
+	go fileActionSender(change)
 }
 
 func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
@@ -398,26 +408,36 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange) {
 				}
 			} else {
 				if found {
-					if f.Hash == change.PreviousHash {
-						go deleter(change)
-						delete(fileSystemState.State, change.File.Path)
+					if change.IsLocal {
+						go localDelete(change)
+					} else {
+						if f.Hash == change.PreviousHash {
+							go deleter(change)
+							delete(fileSystemState.State, change.File.Path)
+						}
+
 					}
 				}
+
 			}
-
 		}
+		fmt.Println(fileSystemState)
 	}
-	fmt.Println(fileSystemState)
 }
-
 func run(path string) {
 	go func() {
-		client = api.New("foo")
-
-		goboxDirectory := path
+		fmt.Println("yo")
+		client = api.New("")
+		err := os.Chdir(path)
+		if err != nil {
+			fmt.Println("unable to change dir, quitting")
+			return
+		}
+		goboxDirectory := "."
 		goboxDataDirectory := fmt.Sprint(goboxDirectory, "/", dataDirectoryBasename)
 		createGoboxLocalDirectory(goboxDataDirectory)
-		watcherActions, err := startWatcher(path)
+		fmt.Println("WERLKWERLKJEWRLK", goboxDirectory, goboxDataDirectory)
+		watcherActions, err := startWatcher(goboxDirectory)
 		if err != nil {
 			panic("Could not start watcher")
 		}
@@ -438,5 +458,9 @@ func run(path string) {
 }
 
 func main() {
+	fmt.Println("hey")
 	run("../sandbox")
+	for {
+		time.Sleep(1000)
+	}
 }
