@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/golangbox/gobox/structs"
 )
@@ -102,23 +103,29 @@ func (c *Api) UploadFileToServer(fileBody []byte) (err error) {
 
 func (c *Api) DownloadFileFromServer(
 	hash string) (s3_url string, err error) {
-	resp, err := http.PostForm(
-		ApiEndpoint+"download/",
-		url.Values{
-			"SessionKey": {c.SessionKey},
-			"fileHash":   {hash},
-		},
-	)
-	if err != nil {
-		return
-	}
+	for {
+		resp, err := http.PostForm(
+			ApiEndpoint+"download/",
+			url.Values{
+				"SessionKey": {c.SessionKey},
+				"fileHash":   {hash},
+			},
+		)
+		if err != nil {
+			return "", err
+		}
 
-	contents, err := ioutil.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf(string(contents))
-		return
+		contents, err := ioutil.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusInternalServerError {
+			err = fmt.Errorf(string(contents))
+			return "", err
+		} else if resp.StatusCode == http.StatusOK {
+			s3_url = string(contents)
+			return "", err
+		} else {
+			time.Sleep(time.Second * 10)
+		}
 	}
-	s3_url = string(contents)
 	return
 }
 
