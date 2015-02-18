@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Mon Feb 09 14:36:00 2015 Marin Alcaraz
-** Last update Tue Feb 17 19:45:49 2015 Marin Alcaraz
+** Last update Wed Feb 18 14:38:08 2015 Marin Alcaraz
  */
 
 package UDPush
@@ -44,7 +44,7 @@ type WatcherEngine interface {
 type Pusher struct {
 	ServerID string
 	BindedTo uint
-	Watchers map[int]*Watcher
+	Watchers map[string]Watcher
 	Pending  bool
 }
 
@@ -63,28 +63,29 @@ type Watcher struct {
 //Initialize is a 'constructor' for the pusher struct
 func (e *Pusher) Initialize(id string) {
 	e.ServerID = id
-	e.Watchers = make(map[int]*Watcher, maxClients)
+	e.Watchers = make(map[string]Watcher, maxClients)
 }
 
 //Attach Add a new Watcher to the notification slice
-func (e *Pusher) Attach(w *Watcher) (err error) {
+func (e *Pusher) Attach(w Watcher) (err error) {
 	//Check if Watchers is full
 	if len(e.Watchers) == maxClients {
 		return fmt.Errorf("[!] Error: Not enough space for new client")
 	}
 	//Check if element already exists
-	if e.Watchers[w.ClientID] != nil {
+	if _, k := e.Watchers[w.SessionKey]; k {
 		return fmt.Errorf("[!] Warning: client already monitored, skipping addition")
 	}
-	e.Watchers[w.ClientID] = w
+	fmt.Println("Client registered ", w.SessionKey)
+	e.Watchers[w.SessionKey] = w
 	return nil
 }
 
 //Detach Remove a watcher from the notification slice
 func (e *Pusher) Detach(w Watcher) (err error) {
 	//Check if element already exists
-	if e.Watchers[w.ClientID] != nil {
-		e.Watchers[w.ClientID] = nil
+	if _, k := e.Watchers[w.SessionKey]; k {
+		delete(e.Watchers, w.SessionKey)
 		return nil
 	}
 	return fmt.Errorf("[!] Error: client doesn't exist")
@@ -94,10 +95,10 @@ func (e *Pusher) Detach(w Watcher) (err error) {
 func (e *Pusher) Notify(sessionkey string) {
 	for _, k := range e.Watchers {
 		//Is there a better way to do this? Dictionary and list inside?
-		if k.SessionKey == sessionkey {
-			k.Action = true
-			k.Update()
-		}
+		//if k.SessionKey == sessionkey {
+		k.Action = true
+		k.Update()
+		//}
 	}
 }
 
@@ -117,6 +118,7 @@ func (e *Pusher) ShowWatchers() {
 // http://tinyurl.com/lhzjvmm
 func (w *Watcher) Update() {
 	w.Action = true
+	fmt.Printf("Requesting update")
 }
 
 //Network related methods
@@ -151,6 +153,7 @@ func handleConnection(conn net.Conn) error {
 //InitUDPush 'constructs' the UDP notification engine
 //The e on the reciever stands for event
 func (e *Pusher) InitUDPush() error {
+	e.Watchers = make(map[string]Watcher, maxClients)
 	connectionString := fmt.Sprintf("%s:%d", e.ServerID, e.BindedTo)
 	ln, err := net.Listen("tcp", connectionString)
 	if err != nil {
@@ -168,6 +171,12 @@ func (e *Pusher) InitUDPush() error {
 		// Then I need to listen from changes
 		// Notify the clients from that owner
 		// Repeat
+		session := make([]byte, 64)
+		conn.Read(session)
+		e.Attach(Watcher{
+			//This is dangerous
+			SessionKey: string(session),
+		})
 		go handleConnection(conn)
 	}
 }

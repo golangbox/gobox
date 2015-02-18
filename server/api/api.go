@@ -27,8 +27,8 @@ func RenderTemplate(w http.ResponseWriter, tmpl string, data interface{}) {
 
 var Pusher UDPush.Pusher
 
-func ServeServerRoutes(port string, pusher UDPush.Pusher) {
-	Pusher = pusher
+func ServeServerRoutes(port string, pusher *UDPush.Pusher) {
+	Pusher = *pusher
 
 	var err error
 	T, err = template.ParseGlob("templates/*")
@@ -88,7 +88,7 @@ func sessionValidate(fn func(http.ResponseWriter, *http.Request, structs.Client)
 }
 
 func verifyAndReturnClient(req *http.Request) (client structs.Client, err error) {
-	sessionKey := req.FormValue("sessionKey")
+	sessionKey := req.FormValue("SessionKey")
 	if sessionKey == "" {
 		err = fmt.Errorf("No session key with request")
 		return
@@ -144,7 +144,9 @@ func FileActionsHandler(w http.ResponseWriter, req *http.Request,
 	model.DB.Where("user_id = ?", user.Id).
 		Not("id = ?", client.Id).
 		Find(&clients)
+	//If something changes...
 	for _, value := range clients {
+		fmt.Println("Attempting to notify: ", value.SessionKey)
 		Pusher.Notify(value.SessionKey)
 	}
 

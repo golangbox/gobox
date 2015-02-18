@@ -93,5 +93,5 @@ func main() {
 		}
 	}()
 
-	api.ServeServerRoutes("8000", s.pusher)
+	api.ServeServerRoutes("8000", &s.pusher)
 }

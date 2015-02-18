@@ -94,7 +94,7 @@ func findChangedFilesOnInit(goboxDirectoryPath string,
 		if err != nil {
 			return
 		}
-		for fp, _ := range fileSystemState {
+		for fp := range fileSystemState {
 			// may need to change structs so that PreviousHash is in the File struct
 			change, err := watcher.CreateLocalStateChange(fp, watcher.DELETE)
 			if err != nil {
@@ -162,11 +162,15 @@ func serverActions(UDPing <-chan bool, fileActionIdPath string) (out chan struct
 
 func initUDPush(sessionKey string) (notification chan bool, err error) {
 	go func() {
-		conn, err := net.Dial("udp", api.UDPEndpoint)
+		fmt.Println("InitUDPUSH")
+		conn, err := net.Dial("tcp", api.UDPEndpoint)
+		fmt.Println("DIAL SUCCESS")
 		// defer conn.Close()
 		if err != nil {
+			fmt.Println(fmt.Errorf("%s", err))
 			return
 		}
+		fmt.Println("DIAL SUCCESS")
 		sessionKeyBytes := []byte(sessionKey)
 		_, err = conn.Write(sessionKeyBytes)
 		if err != nil {
@@ -549,6 +553,7 @@ func run(path string) {
 		if err != nil {
 			panic("Could not start watcher")
 		}
+		fmt.Println("RUN")
 		UDPNotification, err := initUDPush(client.SessionKey)
 		if err != nil {
 			panic("Could not start UDP socket")
