@@ -19,7 +19,7 @@ const (
 )
 
 type Api struct {
-	sessionKey string
+	SessionKey string
 }
 
 func New(sessionKey string) (c Api) {

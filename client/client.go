@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -93,12 +94,20 @@ func serverActions(UDPing <-chan bool, fileActionId int64) (out chan structs.Sta
 	return
 }
 
-func initUDPush() (notification chan bool, err error) {
+func initUDPush(sessionKey string) (notification chan bool, err error) {
 	go func() {
 		conn, err := net.Dial("udp", api.UDPEndpoint)
 		// defer conn.Close()
 		if err != nil {
 			return
+		}
+		sessionKeyBytes := []byte(sessionKey)
+		n, err := conn.Write()
+		if err != nil {
+			return
+		}
+		if n != len(sessionKeyBytes) {
+			return notification, errors.New("Full session key was not sent")
 		}
 		response := make([]byte, 1)
 		for {
@@ -332,6 +341,7 @@ func serverDeleter(change structs.StateChange) {
 }
 
 func downloader(change structs.StateChange) {
+
 }
 
 func localDeleter(change structs.StateChange) {
@@ -422,6 +432,7 @@ func run(path string) {
 	go func() {
 		errChans := make([]chan interface{}, 0)
 		client = api.New("")
+		fmt.Println(client.SessionKey)
 		err := os.Chdir(path)
 		if err != nil {
 			fmt.Println("unable to change dir, quitting")
@@ -436,7 +447,7 @@ func run(path string) {
 		if err != nil {
 			panic("Could not start watcher")
 		}
-		UDPNotification, err := initUDPush()
+		UDPNotification, err := initUDPush(client.SessionKey)
 		if err != nil {
 			panic("Could not start UDP socket")
 		}
