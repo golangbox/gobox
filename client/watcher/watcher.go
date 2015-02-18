@@ -54,7 +54,7 @@ func (watcher *RecursiveWatcher) AddFolder(folder string) {
 	// watcher.Folders <- folder
 }
 
-func createLocalStateChange(path string, eventType int) (change structs.StateChange, err error) {
+func CreateLocalStateChange(path string, eventType int) (change structs.StateChange, err error) {
 	fi, err := os.Stat(path)
 	if err != nil {
 		if !(eventType == DELETE && os.IsNotExist(err)) {
@@ -112,7 +112,7 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 							// DebugMessage("Detected new file %s", event.Name)
 						}
 
-						change, err := createLocalStateChange(event.Name, CREATE)
+						change, err := CreateLocalStateChange(event.Name, CREATE)
 						if err != nil {
 							continue
 						}
@@ -126,7 +126,7 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 						// DebugMessage("Detected file modification %s", event.Name)
 					}
 
-					change, err := createLocalStateChange(event.Name, MODIFY)
+					change, err := CreateLocalStateChange(event.Name, MODIFY)
 					if err != nil {
 						continue
 					}
@@ -134,7 +134,7 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 				}
 				if event.Op&fsnotify.Remove == fsnotify.Remove {
 					fmt.Println("Got the remove")
-					change, err := createLocalStateChange(event.Name, DELETE)
+					change, err := CreateLocalStateChange(event.Name, DELETE)
 					if err != nil {
 						fmt.Println("error")
 						continue

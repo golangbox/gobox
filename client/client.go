@@ -9,7 +9,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"reflect"
+	"regexp"
 	"time"
 
 	"github.com/golangbox/gobox/client/api"
@@ -45,6 +47,64 @@ func writeError(err error, change structs.StateChange, function string) {
 func writeDone(change structs.StateChange, fa structs.FileAction) {
 	change.Done <- fa
 	close(change.Error)
+}
+
+func findChangedFilesOnInit(goboxDirectoryPath string,
+	fileSystemStatePath string) (err error) {
+	fileSystemState, err := fetchFileSystemState(fileSystemStatePath)
+	out := make(chan structs.StateChange)
+	go func() {
+		err = filepath.Walk(goboxDirectoryPath, func(fp string, fi os.FileInfo, errIn error) (errOut error) {
+
+			if err != nil {
+				panic("Couldn't read filesystem state during findChangedFilesOnInit")
+			}
+			matched, errOut := regexp.MatchString(".Gobox(/.*)*", fp)
+			if errOut != nil {
+				return
+			}
+			if matched {
+				fmt.Println(fp)
+				return
+			}
+			f, found := fileSystemState[fp]
+			if !found {
+				change, err := watcher.CreateLocalStateChange(fp, watcher.CREATE)
+				if err != nil {
+					return
+				}
+				out <- change
+				return
+			}
+			h, err := getSha256FromFilename(fp)
+			if err != nil {
+				return
+			}
+			if f.Hash != h {
+				change, err := watcher.CreateLocalStateChange(fp, watcher.MODIFY)
+				if err != nil {
+					return
+				}
+				out <- change
+				delete(fileSystemState, fp)
+				return
+			}
+			return
+		})
+		if err != nil {
+			return
+		}
+		for fp, _ := range fileSystemState {
+			// may need to change structs so that PreviousHash is in the File struct
+			change, err := watcher.CreateLocalStateChange(fp, watcher.DELETE)
+			if err != nil {
+				return
+			}
+			out <- change
+		}
+		return
+	}()
+	return
 }
 
 func startWatcher(dir string) (out chan structs.StateChange, err error) {
@@ -193,8 +253,11 @@ func writeFileActionIDToLocalFile(id int64, path string) (err error) {
 
 func fetchFileActionID(path string) (id int64, err error) {
 	if _, err := os.Stat(path); err != nil {
-		defaultId := 1
-		writeFileActionIDToLocalFile(id, path)
+		defaultId := int64(1)
+		err = writeFileActionIDToLocalFile(defaultId, path)
+		if err != nil {
+			return id, err
+		}
 	}
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -481,6 +544,7 @@ func run(path string) {
 		goboxFileActionIdFile := goboxDataDirectory + "fileActionId"
 
 		createGoboxLocalDirectory(goboxDataDirectory)
+		// findChangedFilesOnInit(goboxDirectory, goboxFileSystemStateFile)
 		watcherActions, err := startWatcher(goboxDirectory)
 		if err != nil {
 			panic("Could not start watcher")
@@ -510,6 +574,7 @@ func run(path string) {
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Println("usage: ./gobox_client PATH_TO_GOBOX_DIRECTORY")
+		return
 	}
 	fi, err := os.Stat(os.Args[1])
 	if err != nil {
@@ -520,6 +585,8 @@ func main() {
 		fmt.Println("Provided path is not a directory")
 		return
 	}
+
+	fmt.Println("Running : ", os.Args[1])
 	run(os.Args[1])
 	for {
 		time.Sleep(1000)
