@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -425,7 +426,41 @@ func serverDeleter(change structs.StateChange) {
 }
 
 func downloader(change structs.StateChange) {
-
+	select {
+	case <-change.Quit:
+		gracefulQuit(change)
+		return
+	default:
+		// this could take a long time
+		s3_url, err := client.DownloadFileFromServer(change.File.Hash)
+		if err != nil {
+			writeError(err, change, "downloader")
+		}
+		resp, err := http.Get(s3_url)
+		if err != nil {
+			writeError(err, change, "downloader")
+		}
+		contents, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			writeError(err, change, "downloader")
+		}
+		tmpFilename := ".Gobox/tmp/" + change.File.Hash
+		err = ioutil.WriteFile(tmpFilename, contents, 0644)
+		if err != nil {
+			writeError(err, change, "downloader")
+		}
+		select {
+		case <-change.Quit:
+			gracefulQuit(change)
+			return
+		default:
+			err = os.Rename(tmpFilename, change.File.Path)
+			if err != nil {
+				writeError(err, change, "downloader")
+			}
+		}
+	}
+	return
 }
 
 func localDeleter(change structs.StateChange) {
