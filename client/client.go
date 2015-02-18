@@ -15,7 +15,6 @@ import (
 	"github.com/golangbox/gobox/client/api"
 	"github.com/golangbox/gobox/client/watcher"
 	"github.com/golangbox/gobox/structs"
-	// "github.com/golangbox/gobox/client/api"
 )
 
 // TODO
@@ -471,8 +470,19 @@ func run(path string) {
 }
 
 func main() {
-	fmt.Println("hey")
-	run("../sandbox")
+	if len(os.Args) != 2 {
+		fmt.Println("usage: ./gobox_client PATH_TO_GOBOX_DIRECTORY")
+	}
+	fi, err := os.Stat(os.Args[1])
+	if err != nil {
+		fmt.Println("Error reading gobox directory")
+		return
+	}
+	if !fi.IsDir() {
+		fmt.Println("Provided path is not a directory")
+		return
+	}
+	run(os.Args[1])
 	for {
 		time.Sleep(1000)
 	}
