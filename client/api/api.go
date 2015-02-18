@@ -122,7 +122,6 @@ func (c *Api) DownloadFileFromServer(
 	return
 }
 
-// this needs to return the highest FileActionID
 func (c *Api) DownloadClientFileActions(lastId int64) (
 	clientFileActionsResponse structs.ClientFileActionsResponse, err error) {
 	var lastIdString string
