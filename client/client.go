@@ -69,8 +69,13 @@ func createServerStateChange(fa structs.FileAction) (change structs.StateChange)
 // ah shoot! is this the only function that needs to know about the last fileaction ID state?
 // the following function is hypothetical and non-functional as of now
 
-func serverActions(UDPing <-chan bool, fileActionId int64) (out chan structs.StateChange,
+func serverActions(UDPing <-chan bool, fileActionIdPath string) (out chan structs.StateChange,
 	errorChan chan interface{}, err error) {
+	fileActionId, err := fetchFileActionID(fileActionIdPath)
+	if err != nil {
+		panic("Couldn't properly read fileActionId from given path")
+	}
+
 	go func() {
 		for {
 			<-UDPing
@@ -86,7 +91,10 @@ func serverActions(UDPing <-chan bool, fileActionId int64) (out chan structs.Sta
 				change := createServerStateChange(fileAction)
 				out <- change
 			}
-
+			err = writeFileActionIDToLocalFile(fileActionId, fileActionIdPath)
+			if err != nil {
+				fmt.Println("Couldn't write fileActionId to path : ", fileActionIdPath)
+			}
 		}
 	}()
 	return
@@ -131,16 +139,6 @@ func fanActionsIn(watcherActions <-chan structs.StateChange,
 	return out
 }
 
-func writeFileSystemStateToLocalFile(fileSystemState structs.FileSystemState, path string) error {
-	jsonBytes, err := json.Marshal(fileSystemState)
-	if err != nil {
-		return err
-	}
-
-	err = ioutil.WriteFile(path, jsonBytes, 0644)
-	return err
-}
-
 func createGoboxLocalDirectory(path string) {
 	if _, err := os.Stat(path); err != nil {
 		fmt.Println(err.Error())
@@ -155,13 +153,20 @@ func createGoboxLocalDirectory(path string) {
 	}
 }
 
-func fetchFileSystemState(path string) (fileSystemState structs.FileSystemState, err error) {
+func writeFileSystemStateToLocalFile(fileSystemState map[string]structs.File, path string) error {
+	jsonBytes, err := json.Marshal(fileSystemState)
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(path, jsonBytes, 0644)
+	return err
+}
+
+func fetchFileSystemState(path string) (fileSystemState map[string]structs.File, err error) {
 	if _, err := os.Stat(path); err != nil {
 		fmt.Println("Making empty data file")
-		emptyState := structs.FileSystemState{
-			FileActionId: 1,
-			State:        make(map[string]structs.File),
-		}
+		emptyState := make(map[string]structs.File)
 		writeFileSystemStateToLocalFile(emptyState, path)
 	}
 
@@ -172,12 +177,33 @@ func fetchFileSystemState(path string) (fileSystemState structs.FileSystemState,
 	}
 	if data != nil {
 		err = json.Unmarshal(data, &fileSystemState)
-		if err != nil {
-			fmt.Println(err)
-		}
 	}
 	return
 
+}
+
+func writeFileActionIDToLocalFile(id int64, path string) (err error) {
+	jsonBytes, err := json.Marshal(id)
+	if err != nil {
+		return
+	}
+	err = ioutil.WriteFile(path, jsonBytes, 0644)
+	return
+}
+
+func fetchFileActionID(path string) (id int64, err error) {
+	if _, err := os.Stat(path); err != nil {
+		defaultId := 1
+		writeFileActionIDToLocalFile(id, path)
+	}
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return
+	}
+	if data != nil {
+		err = json.Unmarshal(data, &id)
+	}
+	return
 }
 
 func getSha256FromFilename(filename string) (sha256String string,
@@ -344,23 +370,39 @@ func localDeleter(change structs.StateChange) {
 }
 
 func stephen(dataPath string, stateChanges <-chan structs.StateChange,
-	fileSystemState structs.FileSystemState, inputErrChans []chan interface{}) {
+	goboxFileSystemStateFile string, inputErrChans []chan interface{}) {
 	// spin up a goroutine that will fan in error messages using reflect.select
 	// hand it an error channel, and add this to the main select statement
 	// do the same thing for done, so I can write a generic fan-n-in function
+	fileSystemState, err := fetchFileSystemState(goboxFileSystemStateFile)
+	if err != nil {
+		panic("Could not properly retrieve fileSystemState")
+	}
+
 	quitChannels := make(map[string]structs.CurrentAction)
+
 	newErrors := make((chan (chan interface{})))
-	newDones := make((chan (chan interface{})))
 	errors := make(chan interface{})
-	dones := make(chan interface{})
 	go arbitraryFanIn(newErrors, errors, true)
+
+	newDones := make((chan (chan interface{})))
+	dones := make(chan interface{})
 	go arbitraryFanIn(newDones, dones, true)
 
 	for _, ch := range inputErrChans {
 		newErrors <- ch
 	}
 
+	writeFileSystemStateCounter := 0
 	for {
+		if writeFileSystemStateCounter > 5 {
+			writeFileSystemStateToLocalFile(fileSystemState, goboxFileSystemStateFile)
+			if err != nil {
+				fmt.Println("Error while writing fileSystemState to: ", goboxFileSystemStateFile)
+			}
+			writeFileSystemStateCounter = 0
+
+		}
 		// maybe it would be better to combine errors and dones into the same multiplexor?
 		select {
 		case e := <-errors:
@@ -373,14 +415,14 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange,
 		case d := <-dones:
 			fa := d.(structs.FileAction)
 			delete(quitChannels, fa.File.Path)
-			fileSystemState.State[fa.File.Path] = fa.File
+			fileSystemState[fa.File.Path] = fa.File
 		case change := <-stateChanges:
 			if currentAction, found := quitChannels[change.File.Path]; found {
 				// tell goroutine branch to quit
 				currentAction.Quit <- true
 				close(currentAction.Quit)
 			}
-			f, found := fileSystemState.State[change.File.Path]
+			f, found := fileSystemState[change.File.Path]
 			if change.IsLocal {
 				if found {
 					change.PreviousHash = f.Hash
@@ -412,7 +454,7 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange,
 					} else {
 						if f.Hash == change.PreviousHash {
 							go serverDeleter(change)
-							delete(fileSystemState.State, change.File.Path)
+							delete(fileSystemState, change.File.Path)
 						}
 
 					}
@@ -420,7 +462,7 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange,
 
 			}
 		}
-		fmt.Println(fileSystemState)
+		writeFileSystemStateCounter++
 	}
 }
 func run(path string) {
@@ -435,9 +477,10 @@ func run(path string) {
 		}
 		goboxDirectory := "."
 		goboxDataDirectory := goboxDirectory + "/" + dataDirectoryBasename
-		goboxDataFile := goboxDataDirectory + "/data"
+		goboxFileSystemStateFile := goboxDataDirectory + "/fileSystemState"
+		goboxFileActionIdFile := goboxDataDirectory + "fileActionId"
+
 		createGoboxLocalDirectory(goboxDataDirectory)
-		fmt.Println("WERLKWERLKJEWRLK", goboxDirectory, goboxDataDirectory)
 		watcherActions, err := startWatcher(goboxDirectory)
 		if err != nil {
 			panic("Could not start watcher")
@@ -446,20 +489,15 @@ func run(path string) {
 		if err != nil {
 			panic("Could not start UDP socket")
 		}
-		fileSystemState, err := fetchFileSystemState(goboxDataFile)
-		if err != nil {
-			panic("Could not properly retrieve fileSystemState")
-		}
 		// fix this to get correct fileActionID
-		remoteActions, errChan, err := serverActions(UDPNotification,
-			fileSystemState.FileActionId)
+		remoteActions, errChan, err := serverActions(UDPNotification, goboxFileActionIdFile)
 		errChans = append(errChans, errChan)
 		if err != nil {
 			panic("Could not properly start remote actions")
 		}
 		actions := fanActionsIn(watcherActions, remoteActions)
 
-		stephen(goboxDataDirectory+"/data", actions, fileSystemState, errChans)
+		stephen(goboxDataDirectory+"/data", actions, goboxFileSystemStateFile, errChans)
 
 		fmt.Println(watcherActions)
 		for {
