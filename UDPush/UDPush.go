@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Mon Feb 09 14:36:00 2015 Marin Alcaraz
-** Last update Tue Feb 17 16:50:50 2015 Marin Alcaraz
+** Last update Tue Feb 17 19:45:49 2015 Marin Alcaraz
  */
 
 package UDPush
@@ -54,7 +54,7 @@ type Pusher struct {
 type Watcher struct {
 	OwnerID    int
 	ClientID   int
-	SessionKey int
+	SessionKey string
 	Action     bool
 }
 
@@ -91,10 +91,10 @@ func (e *Pusher) Detach(w Watcher) (err error) {
 }
 
 //Notify Tell the watcher {clientID} to update
-func (e *Pusher) Notify(owner int) {
+func (e *Pusher) Notify(sessionkey string) {
 	for _, k := range e.Watchers {
 		//Is there a better way to do this? Dictionary and list inside?
-		if k.OwnerID == owner {
+		if k.SessionKey == sessionkey {
 			k.Action = true
 			k.Update()
 		}
@@ -131,13 +131,10 @@ func getPendingUpdates() update {
 func handleConnection(conn net.Conn) error {
 	for {
 		//Check if there is something to update...
-		//TODO: This function needs pairing
 		out := getPendingUpdates()
 		if out.status {
-			//Write to client
-
+			//Notify()
 			//Create an slice of bytes to contain the ownerID
-			//Since we can only send []bytes we must to this
 			notification := make([]byte, 1)
 			notification[0] = byte(out.ownerID)
 
@@ -159,7 +156,7 @@ func (e *Pusher) InitUDPush() error {
 	if err != nil {
 		return fmt.Errorf("Error at initUDPush: %s", err)
 	}
-	fmt.Println("[+] UDP Listening on:", connectionString)
+	fmt.Println("[+] UDP Listening on: ", connectionString)
 	for {
 		conn, err := ln.Accept()
 		defer conn.Close()
@@ -167,6 +164,10 @@ func (e *Pusher) InitUDPush() error {
 		if err != nil {
 			return fmt.Errorf("Error at initUDPush: %s", err)
 		}
+		// I need the owner ID of every client
+		// Then I need to listen from changes
+		// Notify the clients from that owner
+		// Repeat
 		go handleConnection(conn)
 	}
 }

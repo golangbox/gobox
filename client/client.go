@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -102,12 +101,9 @@ func initUDPush(sessionKey string) (notification chan bool, err error) {
 			return
 		}
 		sessionKeyBytes := []byte(sessionKey)
-		n, err := conn.Write()
+		_, err = conn.Write(sessionKeyBytes)
 		if err != nil {
 			return
-		}
-		if n != len(sessionKeyBytes) {
-			return notification, errors.New("Full session key was not sent")
 		}
 		response := make([]byte, 1)
 		for {

@@ -22,7 +22,7 @@ type Api struct {
 	SessionKey string
 }
 
-func New(sessionKey string) (c Api) {
+func New(SessionKey string) (c Api) {
 	resp, err := http.Get(ApiEndpoint + "login/")
 	if err != nil {
 		log.Fatal(err)
@@ -31,14 +31,14 @@ func New(sessionKey string) (c Api) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	c.sessionKey = string(keyBytes)
+	c.SessionKey = string(keyBytes)
 	return
 }
 
 func (c *Api) apiRequest(endpoint string, body []byte,
 	fileType string) (*http.Response, error) {
 	return http.Post(
-		ApiEndpoint+endpoint+"/?sessionKey="+c.sessionKey,
+		ApiEndpoint+endpoint+"/?SessionKey="+c.SessionKey,
 		"application/json",
 		bytes.NewBuffer(body),
 	)
@@ -105,7 +105,7 @@ func (c *Api) DownloadFileFromServer(
 	resp, err := http.PostForm(
 		ApiEndpoint+"download/",
 		url.Values{
-			"sessionKey": {c.sessionKey},
+			"SessionKey": {c.SessionKey},
 			"fileHash":   {hash},
 		},
 	)
@@ -129,7 +129,7 @@ func (c *Api) DownloadClientFileActions(lastId int64) (
 	resp, err := http.PostForm(
 		ApiEndpoint+"/clients/",
 		url.Values{
-			"sessionKey": {c.sessionKey},
+			"SessionKey": {c.SessionKey},
 			"lastID":     {lastIdString},
 		},
 	)
