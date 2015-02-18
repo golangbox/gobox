@@ -5,9 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 	"text/template"
 
 	"github.com/golangbox/gobox/UDPush"
@@ -15,8 +17,8 @@ import (
 	"github.com/golangbox/gobox/server/model"
 	"github.com/golangbox/gobox/server/s3"
 	"github.com/golangbox/gobox/structs"
+	"github.com/gorilla/mux"
 	"github.com/jinzhu/gorm"
-	"github.com/sqs/mux"
 )
 
 var T *template.Template
@@ -31,7 +33,7 @@ func ServeServerRoutes(port string, pusher *UDPush.Pusher) {
 	fmt.Println("SERVE ROUTES")
 	pusher.ShowWatchers()
 	var err error
-	T, err = template.ParseGlob("templates/*")
+	T, err = template.ParseGlob("server/templates/*")
 	_ = err
 	r := mux.NewRouter()
 	r.StrictSlash(true)
@@ -40,7 +42,8 @@ func ServeServerRoutes(port string, pusher *UDPush.Pusher) {
 	r.HandleFunc("/", IndexHandler)
 	r.HandleFunc("/login/", LoginHandler).Methods("GET")
 	r.HandleFunc("/sign-up/", SignUpHandler).Methods("POST")
-	r.HandleFunc("/file-data/", FilesHandler).Methods("POST")
+	r.HandleFunc("/file-data/{email}", FilesHandler).Methods("POST")
+	r.HandleFunc("/download/{id}/{filename}", DownloadHandler).Methods("GET")
 
 	// require client authentication
 	r.HandleFunc("/file-actions/", sessionValidate(FileActionsHandler)).Methods("POST")
@@ -344,18 +347,45 @@ func ClientsFileActionsHandler(w http.ResponseWriter, req *http.Request,
 }
 
 func FilesHandler(w http.ResponseWriter, req *http.Request) {
-	var client structs.Client
-	query := model.DB.Where("name =  ?", "test").First(&client)
+	vars := mux.Vars(req)
+	email := vars["email"]
+
 	var user structs.User
-	query = model.DB.Where("id = ?", client.UserId).First(&user)
-	fmt.Println(user)
-	var files structs.FileSystemFile
+	query := model.DB.Where("email = ?", email).First(&user)
+
+	var files []structs.FileSystemFile
 	query = model.DB.Where("user_id = ?", user.Id).Find(&files)
+
+	for i, value := range files {
+		query = model.DB.First(&files[i].File, value.FileId)
+	}
+
 	if query.Error != nil {
 		panic(query.Error)
 	}
 	jsonBytes, _ := json.Marshal(files)
 	w.Write(jsonBytes)
+}
+
+func DownloadHandler(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	id := vars["id"]
+	intId, _ := strconv.Atoi(id)
+	int64Id := int64(intId)
+
+	var file structs.File
+	query := model.DB.First(&file, int64Id)
+	_ = query
+	url, err := s3.GenerateSignedUrl(file.Hash)
+	resp, err := http.Get(url)
+	// keyBytes, err := ioutil.ReadAll(resp.Body)
+	w.Header().Add("Content-Type", "application/octet-stream")
+	io.Copy(w, resp.Body)
+	_ = err
+	// w.Write(keyBytes)
+
+	// w.Write()
+	// fmt.Println(query.Error)
 }
 
 func IndexHandler(w http.ResponseWriter, req *http.Request) {
@@ -369,7 +399,16 @@ func SignUpHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func LoginHandler(w http.ResponseWriter, req *http.Request) {
-	var client structs.Client
-	model.DB.Where("name = ?", "test").First(&client)
+	httpError := httpError{responseWriter: w}
+	httpError.code = http.StatusInternalServerError
+
+	var user structs.User
+	model.DB.First(&user)
+	client, err := boxtools.NewClient(user, "stephen", false)
+	httpError.err = err
+	if httpError.check() {
+		return
+	}
+
 	w.Write([]byte(client.SessionKey))
 }

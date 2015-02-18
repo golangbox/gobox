@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"fmt"
@@ -7,9 +7,6 @@ import (
 	"github.com/golangbox/gobox/UDPush"
 	"github.com/golangbox/gobox/boxtools"
 	"github.com/golangbox/gobox/server/api"
-	"github.com/golangbox/gobox/server/model"
-	"github.com/golangbox/gobox/structs"
-	"github.com/jinzhu/gorm"
 )
 
 type services struct {
@@ -42,15 +39,11 @@ func createDummyUser() error {
 	if err != nil {
 		return err
 	}
-	client, err := boxtools.NewClient(user, "test", false)
-	if err != nil {
-		return err
-	}
-	_ = client
+	_ = user
 	return nil
 }
 
-func main() {
+func Run() {
 
 	//Launch API
 
@@ -61,17 +54,17 @@ func main() {
 		clientLimit: 10,
 	}
 
-	model.DB, _ = gorm.Open(
-		"postgres",
-		"dbname=gobox sslmode=disable",
-	)
-	model.DB.AutoMigrate(
-		&structs.User{},
-		&structs.Client{},
-		&structs.FileAction{},
-		&structs.File{},
-		&structs.FileSystemFile{},
-	)
+	// model.DB, _ = gorm.Open(
+	// 	"postgres",
+	// 	"dbname=gobox sslmode=disable",
+	// )
+	// model.DB.AutoMigrate(
+	// 	&structs.User{},
+	// 	&structs.Client{},
+	// 	&structs.FileAction{},
+	// 	&structs.File{},
+	// 	&structs.FileSystemFile{},
+	// )
 
 	err := createDummyUser()
 	if err != nil {
