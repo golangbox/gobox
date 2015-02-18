@@ -162,15 +162,12 @@ func serverActions(UDPing <-chan bool, fileActionIdPath string) (out chan struct
 
 func initUDPush(sessionKey string) (notification chan bool, err error) {
 	go func() {
-		fmt.Println("InitUDPUSH")
 		conn, err := net.Dial("tcp", api.UDPEndpoint)
-		fmt.Println("DIAL SUCCESS")
 		// defer conn.Close()
 		if err != nil {
 			fmt.Println(fmt.Errorf("%s", err))
 			return
 		}
-		fmt.Println("DIAL SUCCESS")
 		sessionKeyBytes := []byte(sessionKey)
 		_, err = conn.Write(sessionKeyBytes)
 		if err != nil {

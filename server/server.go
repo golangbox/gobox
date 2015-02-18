@@ -26,7 +26,6 @@ type server struct {
 	clientLimit uint
 	status      func() bool
 	display     func() string
-	pusher      UDPush.Pusher
 }
 
 func (s *server) checkStatus() bool {
@@ -81,17 +80,16 @@ func main() {
 	////Launch UDP notification service
 	////Define the Subject (The guy who is goin to hold all the clients)
 
-	s.pusher = UDPush.Pusher{
+	pusher := UDPush.Pusher{
 		ServerID: s.ip,
 		BindedTo: s.port,
 	}
 
 	go func() {
-		err = s.pusher.InitUDPush()
+		err = pusher.InitUDPush()
 		if err != nil {
 			fmt.Println(err)
 		}
 	}()
-
-	api.ServeServerRoutes("8000", &s.pusher)
+	api.ServeServerRoutes("8000", &pusher)
 }

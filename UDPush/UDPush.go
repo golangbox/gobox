@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Mon Feb 09 14:36:00 2015 Marin Alcaraz
-** Last update Wed Feb 18 14:38:08 2015 Marin Alcaraz
+** Last update Wed Feb 18 17:21:54 2015 Marin Alcaraz
  */
 
 package UDPush
@@ -78,6 +78,7 @@ func (e *Pusher) Attach(w Watcher) (err error) {
 	}
 	fmt.Println("Client registered ", w.SessionKey)
 	e.Watchers[w.SessionKey] = w
+	e.ShowWatchers()
 	return nil
 }
 
@@ -93,11 +94,12 @@ func (e *Pusher) Detach(w Watcher) (err error) {
 
 //Notify Tell the watcher {clientID} to update
 func (e *Pusher) Notify(sessionkey string) {
+	fmt.Printf("Inside Notify\n")
+	e.ShowWatchers()
 	for _, k := range e.Watchers {
-		//Is there a better way to do this? Dictionary and list inside?
 		//if k.SessionKey == sessionkey {
-		k.Action = true
 		k.Update()
+		k.Action = true
 		//}
 	}
 }
@@ -117,8 +119,8 @@ func (e *Pusher) ShowWatchers() {
 // Update Get update from pusher... Golint forces me to do this
 // http://tinyurl.com/lhzjvmm
 func (w *Watcher) Update() {
+	fmt.Printf("BONJOUR")
 	w.Action = true
-	fmt.Printf("Requesting update")
 }
 
 //Network related methods
@@ -167,16 +169,11 @@ func (e *Pusher) InitUDPush() error {
 		if err != nil {
 			return fmt.Errorf("Error at initUDPush: %s", err)
 		}
-		// I need the owner ID of every client
-		// Then I need to listen from changes
-		// Notify the clients from that owner
-		// Repeat
 		session := make([]byte, 64)
 		conn.Read(session)
 		e.Attach(Watcher{
-			//This is dangerous
 			SessionKey: string(session),
 		})
-		go handleConnection(conn)
+		//go handleConnection(conn)
 	}
 }

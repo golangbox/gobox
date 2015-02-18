@@ -28,8 +28,8 @@ func RenderTemplate(w http.ResponseWriter, tmpl string, data interface{}) {
 var Pusher UDPush.Pusher
 
 func ServeServerRoutes(port string, pusher *UDPush.Pusher) {
-	Pusher = *pusher
-
+	fmt.Println("SERVE ROUTES")
+	pusher.ShowWatchers()
 	var err error
 	T, err = template.ParseGlob("templates/*")
 	_ = err
@@ -144,9 +144,8 @@ func FileActionsHandler(w http.ResponseWriter, req *http.Request,
 	model.DB.Where("user_id = ?", user.Id).
 		Not("id = ?", client.Id).
 		Find(&clients)
-	//If something changes...
+	//How to get the right clients to notify?
 	for _, value := range clients {
-		fmt.Println("Attempting to notify: ", value.SessionKey)
 		Pusher.Notify(value.SessionKey)
 	}
 
