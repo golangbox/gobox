@@ -1,0 +1,53 @@
+<html>
+
+<head>
+    <link rel="stylesheet" href="http://necolas.github.io/normalize.css/3.0.2/normalize.css">
+    <link rel="stylesheet" href="http://getskeleton.com/dist/css/skeleton.css">
+    <script type="text/javascript" src="http://code.jquery.com/jquery-2.0.3.js"></script>
+</head>
+
+<body>
+    <script>
+        $(function() {
+            response = $.ajax({
+                type: "POST",
+                url: "/file-data/gobox@gmail.com",
+                dataType: "json",
+                async: false
+            })
+            // $('body').text(JSON.stringify(response.responseJSON))
+            var json = response.responseJSON;
+            for (var i = 0; i < json.length; i++) {
+                var row = $(
+                    "<tr><td><a href='/download/" + 
+                    json[i].File.Id +
+                    "/" +
+                    json[i].File.Name +
+                    "' target='_blank'>" +
+                    json[i].File.Name + 
+                    "</a></td><td>" +
+                    json[i].Id +
+                    "</td><td>" +
+                    json[i].File.Size +
+                    "</td></tr>")
+                $('tbody').append(row)
+            }
+        })
+    </script>
+    <div class="container">
+        <table class="u-full-width">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>File Id</th>
+                    <th>Size</th>
+                </tr>                
+            </thead>
+            <tbody>
+                
+            </tbody>
+        </table>        
+    </div>
+</body>
+
+</html>

@@ -80,4 +80,5 @@ type FileSystemFile struct {
 	UserId int64
 	FileId int64
 	Path   string `sql:"type:text;"`
+	File   File
 }
