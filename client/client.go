@@ -57,16 +57,13 @@ func findChangedFilesOnInit(
 	serverActionsInitScanDone chan<- struct{}) (
 	out chan structs.StateChange, err error) {
 
+	out = make(chan structs.StateChange)
 	fileSystemState, err := fetchFileSystemState(fileSystemStateFile)
 	if err != nil {
 		return
 	}
-	fmt.Println(&out)
 	go func() {
-		fmt.Println("About to walk filesystem")
-		fmt.Println(&out)
 		err = filepath.Walk(goboxDirectoryPath, func(fp string, fi os.FileInfo, errIn error) (errOut error) {
-			fmt.Println(&out)
 			if errIn != nil {
 				return errIn
 			}
@@ -87,9 +84,7 @@ func findChangedFilesOnInit(
 				if err != nil {
 					return
 				}
-				fmt.Println(change)
 				out <- change
-				fmt.Println("after writing change")
 				return
 			}
 			h, err := getSha256FromFilename(fp)
@@ -118,10 +113,8 @@ func findChangedFilesOnInit(
 			}
 			out <- change
 		}
-		fmt.Println("Before notification of watcher and serverActions")
 		watcherInitScanDone <- struct{}{}
 		serverActionsInitScanDone <- struct{}{}
-		fmt.Println("about to return")
 		return
 	}()
 	return
@@ -159,7 +152,6 @@ func serverActions(UDPing <-chan bool, fileActionIdPath string,
 
 	go func() {
 		<-initScanDone
-		fmt.Println("recieved init scan done signal")
 		for {
 			<-UDPing
 			fmt.Println("-----------------PING RECIEVED--------------------")
@@ -213,13 +205,9 @@ func fanActionsIn(initActions <-chan structs.StateChange,
 	serverActions <-chan structs.StateChange) chan structs.StateChange {
 	out := make(chan structs.StateChange)
 	go func() {
-		fmt.Println("FAAAAAAAN")
-		fmt.Println(&initActions)
 		for {
-			fmt.Println("blocking on select")
 			select {
 			case stateChange := <-initActions:
-				fmt.Println("recieved statechange")
 				out <- stateChange
 			case stateChange := <-watcherActions:
 				out <- stateChange
@@ -235,7 +223,6 @@ func createGoboxLocalDirectory(path string) {
 	if _, err := os.Stat(path); err != nil {
 		fmt.Println(err.Error())
 		if os.IsNotExist(err) {
-			fmt.Println(err)
 			fmt.Println("Making directory")
 			err := os.Mkdir(path, 0777)
 			if err != nil {
@@ -257,7 +244,6 @@ func writeFileSystemStateToLocalFile(fileSystemState map[string]structs.File, pa
 
 func fetchFileSystemState(path string) (fileSystemState map[string]structs.File, err error) {
 	if _, err := os.Stat(path); err != nil {
-		fmt.Println("Making empty data file")
 		emptyState := make(map[string]structs.File)
 		writeFileSystemStateToLocalFile(emptyState, path)
 	}
@@ -644,10 +630,8 @@ func run(path string) {
 		}
 
 		actions := fanActionsIn(initActions, watcherActions, remoteActions)
-		fmt.Println("Fanning in")
 		stephen(goboxFileSystemStateFile, actions, errChans)
 
-		fmt.Println(watcherActions)
 		for {
 			time.Sleep(1000)
 		}
