@@ -1,0 +1,162 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/golangbox/gobox/structs"
+)
+
+const (
+<<<<<<< HEAD
+	ApiEndpoint = "http://127.0.0.1:8000/"
+	UDPEndpoint = "127.0.0.1:4242"
+=======
+	ApiEndpoint = "http://localhost:8000/"
+	UDPEndpoint = "localhost:4242"
+>>>>>>> b75353a8a44313b9ce2acf63c3a3f29513e45772
+)
+
+type Api struct {
+	SessionKey string
+}
+
+func New(SessionKey string) (c Api) {
+	resp, err := http.Get(ApiEndpoint + "login/")
+	if err != nil {
+		log.Fatal(err)
+	}
+	keyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	c.SessionKey = string(keyBytes)
+	return
+}
+
+func (c *Api) apiRequest(endpoint string, body []byte,
+	fileType string) (*http.Response, error) {
+	return http.Post(
+		ApiEndpoint+endpoint+"/?SessionKey="+c.SessionKey,
+		"application/json",
+		bytes.NewBuffer(body),
+	)
+}
+
+func (c *Api) SendFileActionsToServer(
+	fileActions []structs.FileAction) (
+	filesToUpload []string, err error) {
+
+	jsonBytes, err := json.Marshal(fileActions)
+	if err != nil {
+		return
+	}
+
+	resp, err := c.apiRequest(
+		"file-actions",
+		jsonBytes,
+		"application/json",
+	)
+
+	if err != nil {
+		return
+	}
+
+	contents, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf(string(contents))
+		return
+	}
+
+	err = json.Unmarshal(contents, &filesToUpload)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (c *Api) UploadFileToServer(fileBody []byte) (err error) {
+	resp, err := c.apiRequest(
+		"upload",
+		fileBody,
+		"",
+	)
+	if err != nil {
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		contents, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		err = fmt.Errorf(string(contents))
+		return err
+	}
+	return
+}
+
+func (c *Api) DownloadFileFromServer(
+	hash string) (s3_url string, err error) {
+	for {
+		resp, err := http.PostForm(
+			ApiEndpoint+"download/",
+			url.Values{
+				"SessionKey": {c.SessionKey},
+				"fileHash":   {hash},
+			},
+		)
+		if err != nil {
+			return "", err
+		}
+
+		contents, err := ioutil.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusInternalServerError {
+			err = fmt.Errorf(string(contents))
+			return "", err
+		} else if resp.StatusCode == http.StatusOK {
+			s3_url = string(contents)
+			return "", err
+		} else {
+			time.Sleep(time.Second * 10)
+		}
+	}
+	return
+}
+
+func (c *Api) DownloadClientFileActions(lastId int64) (
+	clientFileActionsResponse structs.ClientFileActionsResponse, err error) {
+	var lastIdString string
+	lastIdString = strconv.FormatInt(lastId, 32)
+	resp, err := http.PostForm(
+		ApiEndpoint+"/clients/",
+		url.Values{
+			"SessionKey": {c.SessionKey},
+			"lastID":     {lastIdString},
+		},
+	)
+	if err != nil {
+		return
+	}
+	contents, err := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf(string(contents))
+		return
+	}
+
+	err = json.Unmarshal(contents, &clientFileActionsResponse)
+	if err != nil {
+		return
+	}
+	return
+}

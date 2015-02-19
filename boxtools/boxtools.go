@@ -144,7 +144,8 @@ func CleanTestFolder(path string, ignores map[string]bool, rootDir bool) (err er
 		if fi.Name() == "." || fi.Name() == ".." {
 			continue
 		}
-		fileName := path + string(filepath.Separator) + fi.Name()
+
+		fileName := filepath.Join(path, fi.Name())
 		fmt.Println(fileName)
 		if _, found := ignores[fi.Name()]; found {
 			ignored++
@@ -156,7 +157,7 @@ func CleanTestFolder(path string, ignores map[string]bool, rootDir bool) (err er
 				return
 			}
 			err = os.Remove(fileName)
-			return
+			continue
 		}
 		err = os.Remove(fileName)
 		if err != nil {
