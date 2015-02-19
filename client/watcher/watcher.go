@@ -78,8 +78,10 @@ func CreateLocalStateChange(path string, eventType int) (change structs.StateCha
 	return
 }
 
-func (watcher *RecursiveWatcher) Run(debug bool) {
+func (watcher *RecursiveWatcher) Run(initScanDone <-chan struct{}, debug bool) {
 	go func() {
+		<-initScanDone
+		fmt.Println("recieved init scan done signal")
 		for {
 			select {
 			case event := <-watcher.Events:

@@ -50,31 +50,43 @@ func writeDone(change structs.StateChange, fa structs.FileAction) {
 	close(change.Error)
 }
 
-func findChangedFilesOnInit(goboxDirectoryPath string,
-	fileSystemStatePath string) (err error) {
-	fileSystemState, err := fetchFileSystemState(fileSystemStatePath)
-	out := make(chan structs.StateChange)
-	go func() {
-		err = filepath.Walk(goboxDirectoryPath, func(fp string, fi os.FileInfo, errIn error) (errOut error) {
+func findChangedFilesOnInit(
+	fileSystemStateFile string,
+	goboxDirectoryPath string,
+	watcherInitScanDone chan<- struct{},
+	serverActionsInitScanDone chan<- struct{}) (
+	out chan structs.StateChange, err error) {
 
-			if err != nil {
-				panic("Couldn't read filesystem state during findChangedFilesOnInit")
+	fileSystemState, err := fetchFileSystemState(fileSystemStateFile)
+	if err != nil {
+		return
+	}
+	fmt.Println(&out)
+	go func() {
+		fmt.Println("About to walk filesystem")
+		fmt.Println(&out)
+		err = filepath.Walk(goboxDirectoryPath, func(fp string, fi os.FileInfo, errIn error) (errOut error) {
+			fmt.Println(&out)
+			if errIn != nil {
+				return errIn
 			}
 			matched, errOut := regexp.MatchString(".Gobox(/.*)*", fp)
 			if errOut != nil {
 				return
 			}
 			if matched {
-				fmt.Println(fp)
 				return
 			}
 			f, found := fileSystemState[fp]
 			if !found {
-				change, err := watcher.CreateLocalStateChange(fp, watcher.CREATE)
+				change, err := watcher.CreateLocalStateChange(fp,
+					watcher.CREATE)
 				if err != nil {
 					return
 				}
+				fmt.Println("Before writing change")
 				out <- change
+				fmt.Println("after writing change")
 				return
 			}
 			h, err := getSha256FromFilename(fp)
@@ -103,19 +115,23 @@ func findChangedFilesOnInit(goboxDirectoryPath string,
 			}
 			out <- change
 		}
+		fmt.Println("Before notification of watcher and serverActions")
+		watcherInitScanDone <- struct{}{}
+		serverActionsInitScanDone <- struct{}{}
+		fmt.Println("about to return")
 		return
 	}()
 	return
 }
 
-func startWatcher(dir string) (out chan structs.StateChange, err error) {
-	fmt.Println(dir)
+func startWatcher(dir string, initScanDone <-chan struct{}) (
+	out chan structs.StateChange, err error) {
 	rw, err := watcher.NewRecursiveWatcher(dir)
 	if err != nil {
 		return out, err
 
 	}
-	rw.Run(false)
+	rw.Run(initScanDone, false)
 	return rw.Files, err
 }
 
@@ -130,7 +146,8 @@ func createServerStateChange(fa structs.FileAction) (change structs.StateChange)
 // ah shoot! is this the only function that needs to know about the last fileaction ID state?
 // the following function is hypothetical and non-functional as of now
 
-func serverActions(UDPing <-chan bool, fileActionIdPath string) (out chan structs.StateChange,
+func serverActions(UDPing <-chan bool, fileActionIdPath string,
+	initScanDone <-chan struct{}) (out chan structs.StateChange,
 	errorChan chan interface{}, err error) {
 	fileActionId, err := fetchFileActionID(fileActionIdPath)
 	if err != nil {
@@ -138,11 +155,14 @@ func serverActions(UDPing <-chan bool, fileActionIdPath string) (out chan struct
 	}
 
 	go func() {
+		<-initScanDone
+		fmt.Println("recieved init scan done signal")
 		for {
 			<-UDPing
 			fmt.Println("-----------------PING RECIEVED--------------------")
 			// these return values are obviously wrong right now
-			clientFileActionResponse, err := client.DownloadClientFileActions(fileActionId)
+			clientFileActionResponse, err := client.DownloadClientFileActions(
+				fileActionId)
 			// need to rethink errors, assumption of a statechange is invalid
 			if err != nil {
 				writeError(err, structs.StateChange{}, "serverActions")
@@ -154,7 +174,8 @@ func serverActions(UDPing <-chan bool, fileActionIdPath string) (out chan struct
 			}
 			err = writeFileActionIDToLocalFile(fileActionId, fileActionIdPath)
 			if err != nil {
-				fmt.Println("Couldn't write fileActionId to path : ", fileActionIdPath)
+				fmt.Println("Couldn't write fileActionId to path : ",
+					fileActionIdPath)
 			}
 		}
 	}()
@@ -184,12 +205,19 @@ func initUDPush(sessionKey string) (notification chan bool, err error) {
 
 }
 
-func fanActionsIn(watcherActions <-chan structs.StateChange,
+func fanActionsIn(initActions <-chan structs.StateChange,
+	watcherActions <-chan structs.StateChange,
 	serverActions <-chan structs.StateChange) chan structs.StateChange {
 	out := make(chan structs.StateChange)
 	go func() {
+		fmt.Println("FAAAAAAAN")
+		fmt.Println(&initActions)
 		for {
+			fmt.Println("blocking on select")
 			select {
+			case stateChange := <-initActions:
+				fmt.Println("recieved statechange")
+				out <- stateChange
 			case stateChange := <-watcherActions:
 				out <- stateChange
 			case stateChange := <-serverActions:
@@ -571,6 +599,8 @@ func stephen(goboxFileSystemStateFile string, stateChanges <-chan structs.StateC
 func run(path string) {
 	go func() {
 		errChans := make([]chan interface{}, 0)
+		watcherInitScanDone := make(chan struct{})
+		serverActionsInitScanDone := make(chan struct{})
 		client = api.New("")
 		fmt.Println(client.SessionKey)
 		err := os.Chdir(path)
@@ -584,8 +614,17 @@ func run(path string) {
 		goboxFileActionIdFile := filepath.Join(goboxDataDirectory, "fileActionId")
 
 		createGoboxLocalDirectory(goboxDataDirectory)
-		// findChangedFilesOnInit(goboxDirectory, goboxFileSystemStateFile)
-		watcherActions, err := startWatcher(goboxDirectory)
+		initActions, err := findChangedFilesOnInit(
+			goboxFileSystemStateFile,
+			goboxDirectory,
+			watcherInitScanDone,
+			serverActionsInitScanDone,
+		)
+		fmt.Println("after init scan started")
+		if err != nil {
+			panic("Could not start init scan")
+		}
+		watcherActions, err := startWatcher(goboxDirectory, watcherInitScanDone)
 		if err != nil {
 			panic("Could not start watcher")
 		}
@@ -594,13 +633,15 @@ func run(path string) {
 			panic("Could not start UDP socket")
 		}
 		// fix this to get correct fileActionID
-		remoteActions, errChan, err := serverActions(UDPNotification, goboxFileActionIdFile)
+		remoteActions, errChan, err := serverActions(UDPNotification,
+			goboxFileActionIdFile, serverActionsInitScanDone)
 		errChans = append(errChans, errChan)
 		if err != nil {
 			panic("Could not properly start remote actions")
 		}
-		actions := fanActionsIn(watcherActions, remoteActions)
 
+		actions := fanActionsIn(initActions, watcherActions, remoteActions)
+		fmt.Println("Fanning in")
 		stephen(goboxFileSystemStateFile, actions, errChans)
 
 		fmt.Println(watcherActions)
