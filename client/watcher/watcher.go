@@ -86,6 +86,9 @@ func (watcher *RecursiveWatcher) Run(debug bool) {
 				if ext := filepath.Ext(event.Name); ext == ".tmp" {
 					continue
 				}
+				if strings.HasPrefix(event.Name, ".Gobox") {
+					continue
+				}
 				// absPath, err := filepath.Abs(event.Name)
 				// if err == nil {
 				// 	event.Name = absPath
