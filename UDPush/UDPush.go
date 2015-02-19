@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Mon Feb 09 14:36:00 2015 Marin Alcaraz
-** Last update Wed Feb 18 17:21:54 2015 Marin Alcaraz
+** Last update Thu Feb 19 12:58:32 2015 Marin Alcaraz
  */
 
 package UDPush
@@ -78,7 +78,6 @@ func (e *Pusher) Attach(w Watcher) (err error) {
 	}
 	fmt.Println("Client registered ", w.SessionKey)
 	e.Watchers[w.SessionKey] = w
-	e.ShowWatchers()
 	return nil
 }
 
@@ -94,9 +93,8 @@ func (e *Pusher) Detach(w Watcher) (err error) {
 
 //Notify Tell the watcher {clientID} to update
 func (e *Pusher) Notify(sessionkey string) {
-	fmt.Printf("Inside Notify\n")
-	e.ShowWatchers()
 	for _, k := range e.Watchers {
+		e.ShowWatchers()
 		//if k.SessionKey == sessionkey {
 		k.Update()
 		k.Action = true
@@ -119,8 +117,7 @@ func (e *Pusher) ShowWatchers() {
 // Update Get update from pusher... Golint forces me to do this
 // http://tinyurl.com/lhzjvmm
 func (w *Watcher) Update() {
-	fmt.Printf("BONJOUR")
-	w.Action = true
+
 }
 
 //Network related methods
@@ -130,31 +127,10 @@ func getPendingUpdates() update {
 		ownerID: 1}
 }
 
-//HandleConnection keeps alive the UDP notification service between
-//client and server
-func handleConnection(conn net.Conn) error {
-	for {
-		//Check if there is something to update...
-		out := getPendingUpdates()
-		if out.status {
-			//Notify()
-			//Create an slice of bytes to contain the ownerID
-			notification := make([]byte, 1)
-			notification[0] = byte(out.ownerID)
-
-			//Send the notification and check the error
-			_, err := conn.Write(notification)
-			if err != nil {
-				return fmt.Errorf("Error handleConnection: %s", err)
-			}
-		}
-	}
-	return nil
-}
-
 //InitUDPush 'constructs' the UDP notification engine
 //The e on the reciever stands for event
 func (e *Pusher) InitUDPush() error {
+	//Initialize the map
 	e.Watchers = make(map[string]Watcher, maxClients)
 	connectionString := fmt.Sprintf("%s:%d", e.ServerID, e.BindedTo)
 	ln, err := net.Listen("tcp", connectionString)
@@ -174,6 +150,5 @@ func (e *Pusher) InitUDPush() error {
 		e.Attach(Watcher{
 			SessionKey: string(session),
 		})
-		//go handleConnection(conn)
 	}
 }

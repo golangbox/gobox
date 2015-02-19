@@ -43,6 +43,7 @@ func createDummyUser() error {
 	return nil
 }
 
+//Run creates all the structures to make or project work
 func Run() {
 
 	//Launch API
@@ -73,7 +74,7 @@ func Run() {
 	////Launch UDP notification service
 	////Define the Subject (The guy who is goin to hold all the clients)
 
-	pusher := UDPush.Pusher{
+	pusher := &UDPush.Pusher{
 		ServerID: s.ip,
 		BindedTo: s.port,
 	}
@@ -84,5 +85,5 @@ func Run() {
 			fmt.Println(err)
 		}
 	}()
-	api.ServeServerRoutes("8000", &pusher)
+	api.ServeServerRoutes("8000", pusher)
 }
