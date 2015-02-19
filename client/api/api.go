@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	ApiEndpoint = "http://10.0.8.98:8000/"
-	UDPEndpoint = "http://10.0.8.98:4242"
+	ApiEndpoint = "http://localhost:8000/"
+	UDPEndpoint = "localhost:4242"
 )
 
 type Api struct {
