@@ -142,14 +142,7 @@ func FileActionsHandler(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	var clients []structs.Client
-	model.DB.Where("user_id = ?", user.Id).
-		Not("id = ?", client.Id).
-		Find(&clients)
-
-	for _, value := range clients {
-		Pusher.Notify(value.SessionKey)
-	}
+	Pusher.Notify(client.SessionKey)
 
 	errs := boxtools.ApplyFileActionsToFileSystemFileTable(fileActions, user)
 	if len(errs) != 0 {

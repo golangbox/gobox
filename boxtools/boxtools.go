@@ -390,6 +390,7 @@ func WriteFileActionsToDatabase(fileActions []structs.FileAction,
 		return outPutFileActions, err
 	}
 	for _, fileAction := range fileActions {
+		fileAction.ClientId = client.Id
 		file, err := FindFile(fileAction.File.Hash, fileAction.File.Path, user)
 		if err != nil {
 			return outPutFileActions, err

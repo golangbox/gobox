@@ -145,9 +145,10 @@ func createServerStateChange(fa structs.FileAction) (change structs.StateChange)
 func serverActions(UDPing <-chan bool, fileActionIdPath string,
 	initScanDone <-chan struct{}) (out chan structs.StateChange,
 	errorChan chan interface{}, err error) {
+	out = make(chan structs.StateChange)
 	fileActionId, err := fetchFileActionID(fileActionIdPath)
 	if err != nil {
-		panic("Couldn't properly read fileActionId from given path")
+		panic("Couldn't properly read fil eActionId from given path")
 	}
 
 	go func() {
@@ -156,23 +157,20 @@ func serverActions(UDPing <-chan bool, fileActionIdPath string,
 			<-UDPing
 			fmt.Println("-----------------PING RECIEVED--------------------")
 			// these return values are obviously wrong right now
-			fmt.Println("1")
+			fmt.Println("File aCTION ID", fileActionId)
 			clientFileActionResponse, err := client.DownloadClientFileActions(
 				fileActionId)
-			fmt.Println("2")
 			// need to rethink errors, assumption of a statechange is invalid
 			if err != nil {
 				fmt.Println(err)
 				writeError(err, structs.StateChange{}, "serverActions")
 			}
 			fileActionId = clientFileActionResponse.LastId
-			fmt.Println("3")
 			for _, fileAction := range clientFileActionResponse.FileActions {
 				change := createServerStateChange(fileAction)
 				out <- change
 				fmt.Println("loop")
 			}
-			fmt.Println("4")
 			err = writeFileActionIDToLocalFile(fileActionId, fileActionIdPath)
 			if err != nil {
 				fmt.Println("Couldn't write fileActionId to path : ",
@@ -218,12 +216,16 @@ func fanActionsIn(initActions <-chan structs.StateChange,
 	out := make(chan structs.StateChange)
 	go func() {
 		for {
+			fmt.Println("FanActions")
 			select {
 			case stateChange := <-initActions:
+				fmt.Println("fanActions inside the stateChange := <-initActions")
 				out <- stateChange
 			case stateChange := <-watcherActions:
+				fmt.Println("fanActions inside the stateChange := <-WatcherActions")
 				out <- stateChange
 			case stateChange := <-serverActions:
+				fmt.Println("fanActions inside the stateChange := <-serverActions")
 				out <- stateChange
 			}
 		}
@@ -454,6 +456,7 @@ func serverDeleter(change structs.StateChange) {
 }
 
 func downloader(change structs.StateChange) {
+	fmt.Println("begin")
 	select {
 	case <-change.Quit:
 		gracefulQuit(change)
@@ -488,6 +491,7 @@ func downloader(change structs.StateChange) {
 			}
 		}
 	}
+	fmt.Println("look")
 	return
 }
 
@@ -548,6 +552,7 @@ func stephen(goboxFileSystemStateFile string, stateChanges <-chan structs.StateC
 			delete(quitChannels, fa.File.Path)
 			fileSystemState[fa.File.Path] = fa.File
 		case change := <-stateChanges:
+			fmt.Printf("Stephen says: |%s|", change)
 			if currentAction, found := quitChannels[change.File.Path]; found {
 				// tell goroutine branch to quit
 				currentAction.Quit <- true
@@ -576,6 +581,7 @@ func stephen(goboxFileSystemStateFile string, stateChanges <-chan structs.StateC
 				if change.IsLocal {
 					go hasher(change)
 				} else {
+					fmt.Println("[!]Attempting download...")
 					go downloader(change)
 				}
 			} else {

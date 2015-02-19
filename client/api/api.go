@@ -67,19 +67,15 @@ func (c *Api) SendFileActionsToServer(
 	//}
 
 	contents, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println(contents)
 	if err != nil {
-		fmt.Println("[*]")
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf(string(contents))
 		return
 	}
 	err = json.Unmarshal(contents, &filesToUpload)
 	if err != nil {
-		fmt.Println("[-]")
 		return
 	}
 	return
@@ -141,7 +137,7 @@ func (c *Api) DownloadClientFileActions(lastId int64) (
 		ApiEndpoint+"clients/",
 		url.Values{
 			"SessionKey": {c.SessionKey},
-			"lastID":     {lastIdString},
+			"lastId":     {lastIdString},
 		},
 	)
 	if err != nil {

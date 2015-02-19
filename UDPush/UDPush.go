@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Mon Feb 09 14:36:00 2015 Marin Alcaraz
-** Last update Thu Feb 19 14:41:39 2015 Marin Alcaraz
+** Last update Thu Feb 19 15:45:08 2015 Marin Alcaraz
  */
 
 package UDPush
@@ -96,10 +96,10 @@ func (e *Pusher) Detach(w Watcher) (err error) {
 //Notify Tell the watcher {clientID} to update
 func (e *Pusher) Notify(sessionkey string) {
 	for _, k := range e.Watchers {
-		//if k.SessionKey == sessionkey {
-		k.Update()
-		k.Action = true
-		//}
+		if k.SessionKey != sessionkey {
+			k.Update()
+			k.Action = true
+		}
 	}
 }
 
@@ -119,7 +119,7 @@ func (e *Pusher) ShowWatchers() {
 func (w *Watcher) Update() {
 	w.Action = true
 	fits := w.SessionKey[:2]
-	fmt.Println("[!]Attempting to update watcher: %s", fits)
+	fmt.Println("[!] Attempting to update watcher: %s", fits)
 	writen, err := w.Connection.Write([]byte("Y"))
 	if writen != len([]byte("Y")) {
 		fmt.Println("[!]Error writting: unable to write")
