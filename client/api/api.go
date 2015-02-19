@@ -114,14 +114,15 @@ func (c *Api) DownloadFileFromServer(
 		if err != nil {
 			return "", err
 		}
-
+		fmt.Println("HASH: ", hash)
 		contents, err := ioutil.ReadAll(resp.Body)
+		fmt.Println(string(contents))
 		if resp.StatusCode == http.StatusInternalServerError {
 			err = fmt.Errorf(string(contents))
 			return "", err
 		} else if resp.StatusCode == http.StatusOK {
 			s3_url = string(contents)
-			return "", err
+			return s3_url, err
 		} else {
 			time.Sleep(time.Second * 10)
 		}

@@ -391,6 +391,7 @@ func WriteFileActionsToDatabase(fileActions []structs.FileAction,
 	}
 	for _, fileAction := range fileActions {
 		fileAction.ClientId = client.Id
+		fileAction.File.UserId = user.Id
 		file, err := FindFile(fileAction.File.Hash, fileAction.File.Path, user)
 		if err != nil {
 			return outPutFileActions, err

@@ -168,6 +168,7 @@ func serverActions(UDPing <-chan bool, fileActionIdPath string,
 			fileActionId = clientFileActionResponse.LastId
 			for _, fileAction := range clientFileActionResponse.FileActions {
 				change := createServerStateChange(fileAction)
+				fmt.Println("In server actions hash: ", change.File.Hash)
 				out <- change
 				fmt.Println("loop")
 			}
@@ -226,6 +227,7 @@ func fanActionsIn(initActions <-chan structs.StateChange,
 				out <- stateChange
 			case stateChange := <-serverActions:
 				fmt.Println("fanActions inside the stateChange := <-serverActions")
+				fmt.Println("Fanin: ", stateChange.File.Hash)
 				out <- stateChange
 			}
 		}
@@ -456,7 +458,7 @@ func serverDeleter(change structs.StateChange) {
 }
 
 func downloader(change structs.StateChange) {
-	fmt.Println("begin")
+	fmt.Println("Change: ", change.File.Hash)
 	select {
 	case <-change.Quit:
 		gracefulQuit(change)
@@ -472,24 +474,25 @@ func downloader(change structs.StateChange) {
 			writeError(err, change, "downloader")
 		}
 		contents, err := ioutil.ReadAll(resp.Body)
+		fmt.Println(contents)
 		if err != nil {
 			writeError(err, change, "downloader")
 		}
-		tmpFilename := filepath.Join(".Gobox/tmp/", change.File.Hash)
-		err = ioutil.WriteFile(tmpFilename, contents, 0644)
+		//tmpFilename := filepath.Join(".Gobox/tmp/", change.File.Hash)
+		err = ioutil.WriteFile(change.File.Path, contents, 0644)
 		if err != nil {
 			writeError(err, change, "downloader")
 		}
-		select {
-		case <-change.Quit:
-			gracefulQuit(change)
-			return
-		default:
-			err = os.Rename(tmpFilename, change.File.Path)
-			if err != nil {
-				writeError(err, change, "downloader")
-			}
-		}
+		//select {
+		//case <-change.Quit:
+		//gracefulQuit(change)
+		//return
+		//default:
+		//err = os.Rename(tmpFilename, change.File.Path)
+		//if err != nil {
+		//writeError(err, change, "downloader")
+		//}
+		//}
 	}
 	fmt.Println("look")
 	return

@@ -322,6 +322,12 @@ func ClientsFileActionsHandler(w http.ResponseWriter, req *http.Request,
 
 	fileActions = boxtools.RemoveRedundancyFromFileActions(fileActions)
 
+	for key, value := range fileActions {
+		var file structs.File
+		_ = model.DB.First(&file, value.FileId)
+		fileActions[key].File = file
+	}
+
 	responseStruct := structs.ClientFileActionsResponse{
 		LastId:      highestId,
 		FileActions: fileActions,
