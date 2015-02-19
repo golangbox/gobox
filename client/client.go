@@ -444,7 +444,7 @@ func downloader(change structs.StateChange) {
 		if err != nil {
 			writeError(err, change, "downloader")
 		}
-		tmpFilename := ".Gobox/tmp/" + change.File.Hash
+		tmpFilename := filepath.Join(".Gobox/tmp/", change.File.Hash)
 		err = ioutil.WriteFile(tmpFilename, contents, 0644)
 		if err != nil {
 			writeError(err, change, "downloader")
@@ -467,8 +467,8 @@ func localDeleter(change structs.StateChange) {
 	go fileActionSender(change)
 }
 
-func stephen(dataPath string, stateChanges <-chan structs.StateChange,
-	goboxFileSystemStateFile string, inputErrChans []chan interface{}) {
+func stephen(goboxFileSystemStateFile string, stateChanges <-chan structs.StateChange,
+	inputErrChans []chan interface{}) {
 	// spin up a goroutine that will fan in error messages using reflect.select
 	// hand it an error channel, and add this to the main select statement
 	// do the same thing for done, so I can write a generic fan-n-in function
@@ -494,9 +494,14 @@ func stephen(dataPath string, stateChanges <-chan structs.StateChange,
 	writeFileSystemStateCounter := 0
 	for {
 		if writeFileSystemStateCounter > 5 {
-			writeFileSystemStateToLocalFile(fileSystemState, goboxFileSystemStateFile)
+			writeFileSystemStateToLocalFile(
+				fileSystemState,
+				goboxFileSystemStateFile,
+			)
 			if err != nil {
-				fmt.Println("Error while writing fileSystemState to: ", goboxFileSystemStateFile)
+				fmt.Println(
+					"Error while writing fileSystemState to: ",
+					goboxFileSystemStateFile)
 			}
 			writeFileSystemStateCounter = 0
 
@@ -574,9 +579,9 @@ func run(path string) {
 			return
 		}
 		goboxDirectory := "."
-		goboxDataDirectory := goboxDirectory + "/" + dataDirectoryBasename
-		goboxFileSystemStateFile := goboxDataDirectory + "/fileSystemState"
-		goboxFileActionIdFile := goboxDataDirectory + "fileActionId"
+		goboxDataDirectory := filepath.Join(goboxDirectory, dataDirectoryBasename)
+		goboxFileSystemStateFile := filepath.Join(goboxDataDirectory, "fileSystemState")
+		goboxFileActionIdFile := filepath.Join(goboxDataDirectory, "fileActionId")
 
 		createGoboxLocalDirectory(goboxDataDirectory)
 		// findChangedFilesOnInit(goboxDirectory, goboxFileSystemStateFile)
@@ -596,7 +601,7 @@ func run(path string) {
 		}
 		actions := fanActionsIn(watcherActions, remoteActions)
 
-		stephen(goboxDataDirectory+"/data", actions, goboxFileSystemStateFile, errChans)
+		stephen(goboxFileSystemStateFile, actions, errChans)
 
 		fmt.Println(watcherActions)
 		for {
