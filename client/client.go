@@ -178,6 +178,7 @@ func serverActions(UDPing <-chan bool, fileActionIdPath string,
 }
 
 func initUDPush(sessionKey string) (notification chan bool, err error) {
+	notification = make(chan bool)
 	go func() {
 		conn, err := net.Dial("udp", api.UDPEndpoint)
 		// defer conn.Close()
@@ -192,8 +193,9 @@ func initUDPush(sessionKey string) (notification chan bool, err error) {
 		response := make([]byte, 1)
 		for {
 			read, _ := conn.Read(response)
-			fmt.Println(read)
+			fmt.Println("message read from socket", read)
 			notification <- true
+			fmt.Println("YO")
 		}
 	}()
 	return
