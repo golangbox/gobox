@@ -15,6 +15,7 @@ type StateChange struct {
 type CurrentAction struct {
 	Quit     chan<- bool
 	IsCreate bool
+	IsLocal  bool
 }
 
 type ClientFileActionsResponse struct {

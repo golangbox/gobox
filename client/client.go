@@ -555,9 +555,11 @@ func stephen(goboxFileSystemStateFile string, stateChanges <-chan structs.StateC
 			delete(quitChannels, fa.File.Path)
 			fileSystemState[fa.File.Path] = fa.File
 		case change := <-stateChanges:
-			fmt.Printf("Stephen says: |%s|", change)
 			if currentAction, found := quitChannels[change.File.Path]; found {
 				// tell goroutine branch to quit
+				if currentAction.IsLocal == false {
+					continue
+				}
 				currentAction.Quit <- true
 				close(currentAction.Quit)
 			}
@@ -576,7 +578,7 @@ func stephen(goboxFileSystemStateFile string, stateChanges <-chan structs.StateC
 			newDones <- doneChan
 			errChan := make(chan interface{}, 1)
 			newErrors <- errChan
-			quitChannels[change.File.Path] = structs.CurrentAction{Quit: quitChan, IsCreate: change.IsCreate}
+			quitChannels[change.File.Path] = structs.CurrentAction{Quit: quitChan, IsCreate: change.IsCreate, IsLocal: change.IsLocal}
 			change.Quit = quitChan
 			change.Done = doneChan
 			change.Error = errChan
