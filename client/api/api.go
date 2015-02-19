@@ -51,6 +51,7 @@ func (c *Api) SendFileActionsToServer(
 
 	jsonBytes, err := json.Marshal(fileActions)
 	if err != nil {
+		fmt.Println("[+]")
 		return
 	}
 
@@ -60,12 +61,15 @@ func (c *Api) SendFileActionsToServer(
 		"application/json",
 	)
 
-	if err != nil {
-		return
-	}
+	//if err != nil {
+	//fmt.Println("[!] API")
+	//return
+	//}
 
-	contents, err := ioutil.ReadAll(resp.Body)
+	contents, _ := ioutil.ReadAll(resp.Body)
+	fmt.Println(contents)
 	if err != nil {
+		fmt.Println("[*]")
 		return
 	}
 
@@ -73,9 +77,9 @@ func (c *Api) SendFileActionsToServer(
 		err = fmt.Errorf(string(contents))
 		return
 	}
-
 	err = json.Unmarshal(contents, &filesToUpload)
 	if err != nil {
+		fmt.Println("[-]")
 		return
 	}
 	return
@@ -134,23 +138,26 @@ func (c *Api) DownloadClientFileActions(lastId int64) (
 	var lastIdString string
 	lastIdString = strconv.FormatInt(lastId, 32)
 	resp, err := http.PostForm(
-		ApiEndpoint+"/clients/",
+		ApiEndpoint+"clients/",
 		url.Values{
 			"SessionKey": {c.SessionKey},
 			"lastID":     {lastIdString},
 		},
 	)
 	if err != nil {
+		fmt.Println("[!]")
 		return
 	}
 	contents, err := ioutil.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		err = fmt.Errorf(string(contents))
+		fmt.Println(resp.StatusCode)
 		return
 	}
 
 	err = json.Unmarshal(contents, &clientFileActionsResponse)
 	if err != nil {
+		fmt.Println("[+]")
 		return
 	}
 	return

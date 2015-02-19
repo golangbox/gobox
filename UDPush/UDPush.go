@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Mon Feb 09 14:36:00 2015 Marin Alcaraz
-** Last update Thu Feb 19 12:58:32 2015 Marin Alcaraz
+** Last update Thu Feb 19 14:41:39 2015 Marin Alcaraz
  */
 
 package UDPush
@@ -56,6 +56,7 @@ type Watcher struct {
 	ClientID   int
 	SessionKey string
 	Action     bool
+	Connection net.Conn
 }
 
 // Methods for struct to satisfy the notificationEngine interface
@@ -84,7 +85,8 @@ func (e *Pusher) Attach(w Watcher) (err error) {
 //Detach Remove a watcher from the notification slice
 func (e *Pusher) Detach(w Watcher) (err error) {
 	//Check if element already exists
-	if _, k := e.Watchers[w.SessionKey]; k {
+	if item, ok := e.Watchers[w.SessionKey]; ok {
+		item.Connection.Close()
 		delete(e.Watchers, w.SessionKey)
 		return nil
 	}
@@ -94,7 +96,6 @@ func (e *Pusher) Detach(w Watcher) (err error) {
 //Notify Tell the watcher {clientID} to update
 func (e *Pusher) Notify(sessionkey string) {
 	for _, k := range e.Watchers {
-		e.ShowWatchers()
 		//if k.SessionKey == sessionkey {
 		k.Update()
 		k.Action = true
@@ -106,7 +107,6 @@ func (e *Pusher) Notify(sessionkey string) {
 
 //ShowWatchers Print current watchers in pusher
 func (e *Pusher) ShowWatchers() {
-	fmt.Printf("Current watchers in %s:\n", e.ServerID)
 	for _, k := range e.Watchers {
 		fmt.Println("Watcher: ", k)
 	}
@@ -117,6 +117,16 @@ func (e *Pusher) ShowWatchers() {
 // Update Get update from pusher... Golint forces me to do this
 // http://tinyurl.com/lhzjvmm
 func (w *Watcher) Update() {
+	w.Action = true
+	fits := w.SessionKey[:2]
+	fmt.Println("[!]Attempting to update watcher: %s", fits)
+	writen, err := w.Connection.Write([]byte("Y"))
+	if writen != len([]byte("Y")) {
+		fmt.Println("[!]Error writting: unable to write")
+	}
+	if err != nil {
+		fmt.Printf("%s", err)
+	}
 
 }
 
@@ -140,7 +150,6 @@ func (e *Pusher) InitUDPush() error {
 	fmt.Println("[+] UDP Listening on: ", connectionString)
 	for {
 		conn, err := ln.Accept()
-		defer conn.Close()
 		fmt.Println("Host connected: ", ln.Addr())
 		if err != nil {
 			return fmt.Errorf("Error at initUDPush: %s", err)
@@ -149,6 +158,7 @@ func (e *Pusher) InitUDPush() error {
 		conn.Read(session)
 		e.Attach(Watcher{
 			SessionKey: string(session),
+			Connection: conn,
 		})
 	}
 }

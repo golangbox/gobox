@@ -156,17 +156,23 @@ func serverActions(UDPing <-chan bool, fileActionIdPath string,
 			<-UDPing
 			fmt.Println("-----------------PING RECIEVED--------------------")
 			// these return values are obviously wrong right now
+			fmt.Println("1")
 			clientFileActionResponse, err := client.DownloadClientFileActions(
 				fileActionId)
+			fmt.Println("2")
 			// need to rethink errors, assumption of a statechange is invalid
 			if err != nil {
+				fmt.Println(err)
 				writeError(err, structs.StateChange{}, "serverActions")
 			}
 			fileActionId = clientFileActionResponse.LastId
+			fmt.Println("3")
 			for _, fileAction := range clientFileActionResponse.FileActions {
 				change := createServerStateChange(fileAction)
 				out <- change
+				fmt.Println("loop")
 			}
+			fmt.Println("4")
 			err = writeFileActionIDToLocalFile(fileActionId, fileActionIdPath)
 			if err != nil {
 				fmt.Println("Couldn't write fileActionId to path : ",
@@ -191,10 +197,13 @@ func initUDPush(sessionKey string) (notification chan bool, err error) {
 		if err != nil {
 			return
 		}
-		response := make([]byte, 1)
+		response := make([]byte, 21)
 		for {
-			read, _ := conn.Read(response)
-			fmt.Println("message read from socket", read)
+			read, err := conn.Read(response)
+			if err != nil {
+				fmt.Println(err)
+			}
+			fmt.Println("Message read from socket: ", read, string(response))
 			notification <- true
 			fmt.Println("YO")
 		}
@@ -349,7 +358,6 @@ func uploader(path string, change structs.StateChange, fa structs.FileAction) {
 		gracefulQuit(change)
 		return
 	default:
-		fmt.Println(path)
 		buf, err := ioutil.ReadFile(path)
 		if err != nil {
 			writeError(err, change, "uploader")
@@ -594,7 +602,6 @@ func run(path string) {
 		watcherInitScanDone := make(chan struct{})
 		serverActionsInitScanDone := make(chan struct{})
 		client = api.New("")
-		fmt.Println(client.SessionKey)
 		err := os.Chdir(path)
 		if err != nil {
 			fmt.Println("unable to change dir, quitting")
@@ -612,7 +619,6 @@ func run(path string) {
 			watcherInitScanDone,
 			serverActionsInitScanDone,
 		)
-		fmt.Println("after init scan started")
 		if err != nil {
 			panic("Could not start init scan")
 		}
@@ -620,7 +626,6 @@ func run(path string) {
 		if err != nil {
 			panic("Could not start watcher")
 		}
-		fmt.Println("RUN")
 		UDPNotification, err := initUDPush(client.SessionKey)
 		if err != nil {
 			panic("Could not start UDP socket")

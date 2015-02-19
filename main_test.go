@@ -7,6 +7,7 @@ import (
 	"time"
 
 	// "github.com/golangbox/gobox/boxtools"
+	"github.com/golangbox/gobox/boxtools"
 	"github.com/golangbox/gobox/server"
 	"github.com/golangbox/gobox/server/model"
 	"github.com/golangbox/gobox/structs"
@@ -37,12 +38,12 @@ func TestEverything(t *testing.T) {
 		"sandbox/client1/",
 		"sandbox/client2/",
 	}
-	// ignores := make(map[string]bool)
+	ignores := make(map[string]bool)
 	for _, value := range paths {
-		// err := boxtools.CleanTestFolder(value, ignores, true)
-		// if err != nil {
-		// 	panic("Could not delete folder contents")
-		// }
+		err := boxtools.CleanTestFolder(value, ignores, true)
+		if err != nil {
+			panic("Could not delete folder contents")
+		}
 		go func(value string) {
 			cmd := exec.Command(
 				"go",

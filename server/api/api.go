@@ -146,7 +146,6 @@ func FileActionsHandler(w http.ResponseWriter, req *http.Request,
 	model.DB.Where("user_id = ?", user.Id).
 		Not("id = ?", client.Id).
 		Find(&clients)
-	//How to get the right clients to notify?
 
 	for _, value := range clients {
 		Pusher.Notify(value.SessionKey)
