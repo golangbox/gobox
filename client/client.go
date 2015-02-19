@@ -70,6 +70,9 @@ func findChangedFilesOnInit(
 			if errIn != nil {
 				return errIn
 			}
+			if filepath.HasPrefix(fp, ".") || filepath.HasPrefix(fp, "..") {
+				return
+			}
 			matched, errOut := regexp.MatchString(".Gobox(/.*)*", fp)
 			if errOut != nil {
 				return
@@ -84,7 +87,7 @@ func findChangedFilesOnInit(
 				if err != nil {
 					return
 				}
-				fmt.Println("Before writing change")
+				fmt.Println(change)
 				out <- change
 				fmt.Println("after writing change")
 				return
