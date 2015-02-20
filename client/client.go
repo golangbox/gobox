@@ -578,7 +578,11 @@ func stephen(goboxFileSystemStateFile string, stateChanges <-chan structs.StateC
 			newDones <- doneChan
 			errChan := make(chan interface{}, 1)
 			newErrors <- errChan
-			quitChannels[change.File.Path] = structs.CurrentAction{Quit: quitChan, IsCreate: change.IsCreate, IsLocal: change.IsLocal}
+			quitChannels[change.File.Path] = structs.CurrentAction{
+				Quit:     quitChan,
+				IsCreate: change.IsCreate,
+				IsLocal:  change.IsLocal,
+			}
 			change.Quit = quitChan
 			change.Done = doneChan
 			change.Error = errChan
@@ -608,55 +612,48 @@ func stephen(goboxFileSystemStateFile string, stateChanges <-chan structs.StateC
 	}
 }
 func run(path string) {
-	go func() {
-		errChans := make([]chan interface{}, 0)
-		watcherInitScanDone := make(chan struct{})
-		serverActionsInitScanDone := make(chan struct{})
-		client = api.New("")
-		err := os.Chdir(path)
-		if err != nil {
-			fmt.Println("unable to change dir, quitting")
-			return
-		}
-		goboxDirectory := "."
-		goboxDataDirectory := filepath.Join(goboxDirectory, dataDirectoryBasename)
-		goboxFileSystemStateFile := filepath.Join(goboxDataDirectory, "fileSystemState")
-		goboxFileActionIdFile := filepath.Join(goboxDataDirectory, "fileActionId")
+	errChans := make([]chan interface{}, 0)
+	watcherInitScanDone := make(chan struct{})
+	serverActionsInitScanDone := make(chan struct{})
+	client = api.New("")
+	err := os.Chdir(path)
+	if err != nil {
+		fmt.Println("unable to change dir, quitting")
+		return
+	}
+	goboxDirectory := "."
+	goboxDataDirectory := filepath.Join(goboxDirectory, dataDirectoryBasename)
+	goboxFileSystemStateFile := filepath.Join(goboxDataDirectory, "fileSystemState")
+	goboxFileActionIdFile := filepath.Join(goboxDataDirectory, "fileActionId")
 
-		createGoboxLocalDirectory(goboxDataDirectory)
-		initActions, err := findChangedFilesOnInit(
-			goboxFileSystemStateFile,
-			goboxDirectory,
-			watcherInitScanDone,
-			serverActionsInitScanDone,
-		)
-		if err != nil {
-			panic("Could not start init scan")
-		}
-		watcherActions, err := startWatcher(goboxDirectory, watcherInitScanDone)
-		if err != nil {
-			panic("Could not start watcher")
-		}
-		UDPNotification, err := initUDPush(client.SessionKey)
-		if err != nil {
-			panic("Could not start UDP socket")
-		}
-		// fix this to get correct fileActionID
-		remoteActions, errChan, err := serverActions(UDPNotification,
-			goboxFileActionIdFile, serverActionsInitScanDone)
-		errChans = append(errChans, errChan)
-		if err != nil {
-			panic("Could not properly start remote actions")
-		}
+	createGoboxLocalDirectory(goboxDataDirectory)
+	initActions, err := findChangedFilesOnInit(
+		goboxFileSystemStateFile,
+		goboxDirectory,
+		watcherInitScanDone,
+		serverActionsInitScanDone,
+	)
+	if err != nil {
+		panic("Could not start init scan")
+	}
+	watcherActions, err := startWatcher(goboxDirectory, watcherInitScanDone)
+	if err != nil {
+		panic("Could not start watcher")
+	}
+	UDPNotification, err := initUDPush(client.SessionKey)
+	if err != nil {
+		panic("Could not start UDP socket")
+	}
+	// fix this to get correct fileActionID
+	remoteActions, errChan, err := serverActions(UDPNotification,
+		goboxFileActionIdFile, serverActionsInitScanDone)
+	errChans = append(errChans, errChan)
+	if err != nil {
+		panic("Could not properly start remote actions")
+	}
 
-		actions := fanActionsIn(initActions, watcherActions, remoteActions)
-		stephen(goboxFileSystemStateFile, actions, errChans)
-
-		for {
-			time.Sleep(1000)
-		}
-
-	}()
+	actions := fanActionsIn(initActions, watcherActions, remoteActions)
+	stephen(goboxFileSystemStateFile, actions, errChans)
 }
 
 func main() {
@@ -676,7 +673,4 @@ func main() {
 
 	fmt.Println("Running : ", os.Args[1])
 	run(os.Args[1])
-	for {
-		time.Sleep(1000)
-	}
 }
