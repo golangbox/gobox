@@ -21,19 +21,17 @@ import (
 )
 
 // TODO
-// get client/server sessions set up
-// sync a damn file
-// work on download branch
+// Tests for ALL of client
+// make the client die gracefully on error, sigkill or sigint
+// client successfully syncs deletes
+// refactor client for simplicity
 
 // PROBLEMS: No way to tell if a remove event was dir or a file because it can't be os.Stat'ed
 //           Can't remove that dir from a watch because Watcher.watches isn't exposed
 
 var client api.Api
 
-const (
-	dataDirectoryBasename = ".Gobox"
-	serverEndpoint        = "http://requestb.in/1mv9fa41"
-)
+const dataDirectoryBasename = ".Gobox"
 
 func writeError(err error, change structs.StateChange, function string) {
 	change.Error <- structs.ErrorMessage{
@@ -501,6 +499,16 @@ func downloader(change structs.StateChange) {
 func localDeleter(change structs.StateChange) {
 	go fileActionSender(change)
 }
+
+// things that need to be mocked to test stephen:
+
+// goboxFileSystemStateFile?? -- this is going to be quite difficult
+// stateChanges is easy, just make structs and write to the channel
+// inputErrChans is also easy, just hand it two error channels
+//       (write to these in a test to make sure stephen properly recieves these errors
+// test to make sure that the filesystemstate is being written to file correctly
+// mock arbitraryFanIn and write errors and dones,
+// testing the rec
 
 func stephen(goboxFileSystemStateFile string, stateChanges <-chan structs.StateChange,
 	inputErrChans []chan interface{}) {
