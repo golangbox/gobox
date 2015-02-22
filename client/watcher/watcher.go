@@ -101,23 +101,17 @@ func (watcher *RecursiveWatcher) Run(initScanDone <-chan struct{}, debug bool) {
 					fi, err := os.Stat(event.Name)
 					if err != nil {
 						// eg. stat .subl513.tmp : no such file or directory
-						if debug {
-							// DebugError(err)
-						}
 					} else if fi.IsDir() {
-						if debug {
-							// DebugMessage("Detected new directory %s", event.Name)
-						}
 						if !shouldIgnoreFile(filepath.Base(event.Name)) {
 							fmt.Println("adding folder: ", event.Name)
 							watcher.AddFolder(event.Name)
 						}
 					} else {
-						if debug {
-							// DebugMessage("Detected new file %s", event.Name)
-						}
-
-						change, err := CreateLocalStateChange(event.Name, CREATE)
+						fmt.Println("Got the create")
+						change, err := CreateLocalStateChange(
+							event.Name,
+							CREATE,
+						)
 						if err != nil {
 							continue
 						}
@@ -127,10 +121,7 @@ func (watcher *RecursiveWatcher) Run(initScanDone <-chan struct{}, debug bool) {
 
 				if event.Op&fsnotify.Write == fsnotify.Write {
 					// modified a file, assuming that you don't modify folders
-					if debug {
-						// DebugMessage("Detected file modification %s", event.Name)
-					}
-
+					fmt.Println("got the modify")
 					change, err := CreateLocalStateChange(event.Name, MODIFY)
 					if err != nil {
 						continue
