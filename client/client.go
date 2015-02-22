@@ -215,17 +215,12 @@ func fanActionsIn(initActions <-chan structs.StateChange,
 	out := make(chan structs.StateChange)
 	go func() {
 		for {
-			fmt.Println("FanActions")
 			select {
 			case stateChange := <-initActions:
-				fmt.Println("fanActions inside the stateChange := <-initActions")
 				out <- stateChange
 			case stateChange := <-watcherActions:
-				fmt.Println("fanActions inside the stateChange := <-WatcherActions")
 				out <- stateChange
 			case stateChange := <-serverActions:
-				fmt.Println("fanActions inside the stateChange := <-serverActions")
-				fmt.Println("Fanin: ", stateChange.File.Hash)
 				out <- stateChange
 			}
 		}
