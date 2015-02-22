@@ -118,11 +118,14 @@ func SimulateFilesystemChanges(dir string, inserts int, alters int, deletes int)
 			counter++
 			inserted = append(inserted, path)
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	fmt.Println(len(inserted))
+
 	for i := 0; i < alters; i++ {
 		changeRandomPartOfFile(inserted[i])
 		counter++
+		time.Sleep(100 * time.Millisecond)
+
 	}
 	for i := 0; i < deletes; i++ {
 		err := os.Remove(inserted[i])
@@ -130,8 +133,9 @@ func SimulateFilesystemChanges(dir string, inserts int, alters int, deletes int)
 		if err != nil {
 			fmt.Println("Failed to remove a file in simulateFilesystemChanges")
 		}
+		time.Sleep(100 * time.Millisecond)
+
 	}
-	fmt.Println(counter)
 }
 
 func CleanTestFolder(path string, ignores map[string]bool, rootDir bool) (err error) {
