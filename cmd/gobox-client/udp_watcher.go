@@ -1,7 +1,7 @@
 package main
 
 // Interface used by the UDP Listener
-type RemoveEventCollector interface {
+type RemoteEventCollector interface {
 	NewRemoteEvent(stateChange)
 }
 
@@ -11,4 +11,4 @@ func (s collector) NewRemoteEvent(c stateChange) {
 }
 
 // TODO move to tests
-var _ RemoveEventCollector = collector{}
+var _ RemoteEventCollector = collector{}
