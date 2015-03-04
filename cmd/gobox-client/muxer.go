@@ -15,32 +15,6 @@ type collector struct {
 	// TODO needs to stop
 }
 
-// Interface used by the Fs Watcher
-type FsEventCollector interface {
-	NewFsEvent(stateChange)
-}
-
-// Called by Watcher
-func (s collector) NewFsEvent(c stateChange) {
-	s.collect <- c
-}
-
-// TODO move to tests
-var _ FsEventCollector = collector{}
-
-// Interface used by the UDP Listener
-type RemoveEventCollector interface {
-	NewRemoteEvent(stateChange)
-}
-
-// Called by Server Notifications
-func (s collector) NewRemoteEvent(c stateChange) {
-	s.collect <- c
-}
-
-// TODO move to tests
-var _ RemoveEventCollector = collector{}
-
 // Starts a go routine that will collect state changes
 // and send them out the channel returned.
 func (s *collector) startCollecting() (changes <-chan stateChange) {
