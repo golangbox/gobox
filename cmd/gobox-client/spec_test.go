@@ -9,5 +9,7 @@ import (
 func TestUnitSpecs(t *testing.T) {
 	r := gospec.NewRunner()
 
+	r.AddSpec(DescribeReaderWatcher)
+
 	gospec.MainGoTest(r, t)
 }
